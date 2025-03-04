@@ -1,0 +1,24 @@
+{
+  "go.lintOnSave": "package",
+  "go.lintFlags": [
+    "--max-same-issues",
+    "0"
+  ],
+  "go.toolsEnvVars": {
+    "GOOS": "linux",
+    "GOARCH": "amd64",
+  },
+  "clang-format.executable": "/opt/clang-13.0/bin/clang-format",
+  "editor.formatOnSave": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
+  "emeraldwalk.runonsave": {
+    "commands": [
+      {
+        "match": "\\.go$",
+        "cmd": "golines -m 120 -t 4 --shorten-comments --ignore-generated -w ${file}"
+      }
+    ]
+  },
+}
