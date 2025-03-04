@@ -53,4 +53,29 @@ callback := func(cfg ModuleA) error {
 err := DynamicConfigurationManager.Register(ModuleB{}, callback)
 ```
 
-The manager .. typedef
+The manager automatically deduces where in the configuration tree the requested type is.
+For this reason, the configuration can't have the same type twice, or the initial configuration update will fail.
+If two users need to use another dynamically configurable instance of the same struct type, redefine the type.
+
+This does not apply to types that can't be registered upon - such as struct instances within slices.
+
+```go
+type ModuleA struct {
+	Value string
+}
+type ModuleB struct {
+	Value bool
+}
+type ModuleB2 ModuleB
+
+type ConfigurationExampleWithDuplicates struct {
+	A ModuleA
+	B ModuleB
+	B2 ModuleB // This is illegal - B is another instance of the same struct type.
+}
+type ConfigurationExampleWithDuplicates struct {
+	A ModuleA
+	B ModuleB
+	B2 ModuleB2 // This is okay.
+}
+```
