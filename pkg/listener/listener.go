@@ -52,7 +52,7 @@ func NewDynamicConfigurationListener[Configuration any](
 		},
 	)
 
-	updater := &DynamicConfigurationListener[Configuration]{
+	listener := &DynamicConfigurationListener[Configuration]{
 		defaultConfigurationString:               defaultConfiguration,
 		configurationFile:                        file,
 		dynamicConfigurable:                      dynamicConfigurable,
@@ -69,13 +69,13 @@ func NewDynamicConfigurationListener[Configuration any](
 		}
 	}
 
-	if err := updater.update(vpr); err != nil {
+	if err := listener.update(vpr); err != nil {
 		return nil, fmt.Errorf("failed to update initial dynamic configuration: %w", err)
 	}
 
 	vpr.WatchConfig()
 	vpr.OnConfigChange(func(e fsnotify.Event) {
-		if err := updater.update(vpr); err != nil {
+		if err := listener.update(vpr); err != nil {
 			metricFailedToUpdateDynamicConfiguration.Inc()
 			if onConfigurationUpdateFailure != nil {
 				onConfigurationUpdateFailure(err)
@@ -83,7 +83,7 @@ func NewDynamicConfigurationListener[Configuration any](
 		}
 	})
 
-	return updater, nil
+	return listener, nil
 }
 
 func (updater *DynamicConfigurationListener[Configuration]) GetConfiguration() Configuration {
