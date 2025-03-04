@@ -23,7 +23,7 @@ type DynamicConfigurable[Configuration any] interface {
 	OnConfigurationUpdate(newConfiguration Configuration) error
 }
 
-type DynamicConfigurationUpdater[Configuration any] struct {
+type DynamicConfigurationListener[Configuration any] struct {
 	defaultConfigurationString   string
 	configurationFile            string
 	dynamicConfigurable          DynamicConfigurable[Configuration]
@@ -35,14 +35,14 @@ type DynamicConfigurationUpdater[Configuration any] struct {
 	metricFailedToUpdateDynamicConfiguration *metrics_types.LazyCounter
 }
 
-func NewDynamicConfigurationUpdater[Configuration any](
+func NewDynamicConfigurationListener[Configuration any](
 	id string,
 	vpr *viper.Viper,
 	defaultConfiguration string,
 	file string,
 	dynamicConfigurable DynamicConfigurable[Configuration],
 	onConfigurationUpdateFailure func(error),
-) (*DynamicConfigurationUpdater[Configuration], error) {
+) (*DynamicConfigurationListener[Configuration], error) {
 	metricFailedToUpdateDynamicConfiguration := metrics_factory.CreateErrorCounter(
 		updaterErrorMetricName,
 		map[string]string{
@@ -52,7 +52,7 @@ func NewDynamicConfigurationUpdater[Configuration any](
 		},
 	)
 
-	updater := &DynamicConfigurationUpdater[Configuration]{
+	updater := &DynamicConfigurationListener[Configuration]{
 		defaultConfigurationString:               defaultConfiguration,
 		configurationFile:                        file,
 		dynamicConfigurable:                      dynamicConfigurable,
@@ -77,18 +77,20 @@ func NewDynamicConfigurationUpdater[Configuration any](
 	vpr.OnConfigChange(func(e fsnotify.Event) {
 		if err := updater.update(vpr); err != nil {
 			metricFailedToUpdateDynamicConfiguration.Inc()
-			onConfigurationUpdateFailure(err)
+			if onConfigurationUpdateFailure != nil {
+				onConfigurationUpdateFailure(err)
+			}
 		}
 	})
 
 	return updater, nil
 }
 
-func (updater *DynamicConfigurationUpdater[Configuration]) GetConfiguration() Configuration {
+func (updater *DynamicConfigurationListener[Configuration]) GetConfiguration() Configuration {
 	return updater.configuration
 }
 
-func (updater *DynamicConfigurationUpdater[Configuration]) update(vpr *viper.Viper) error {
+func (updater *DynamicConfigurationListener[Configuration]) update(vpr *viper.Viper) error {
 	updater.lock.Lock()
 	defer updater.lock.Unlock()
 
@@ -113,7 +115,7 @@ func (updater *DynamicConfigurationUpdater[Configuration]) update(vpr *viper.Vip
 	return nil
 }
 
-func (updater *DynamicConfigurationUpdater[Configuration]) initConfigFromStringWithViper(
+func (updater *DynamicConfigurationListener[Configuration]) initConfigFromStringWithViper(
 	vpr *viper.Viper,
 	source string,
 	out any,
