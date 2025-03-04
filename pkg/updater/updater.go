@@ -7,16 +7,16 @@ import (
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/groundcover-com/flora/pkg/logger"
-	agent_metrics "github.com/groundcover-com/flora/pkg/metrics"
-	"github.com/groundcover-com/metrics"
+	metrics_factory "github.com/groundcover-com/metrics/pkg/factory"
+	metrics_types "github.com/groundcover-com/metrics/pkg/types"
 	"github.com/spf13/viper"
 )
 
 const (
-	updaterMetricPrefix    = agent_metrics.PromethuesMetricsPrefix + "config_dynamicupdater_"
+	updaterMetricPrefix    = "dynconf_updater_"
 	updaterErrorMetricName = updaterMetricPrefix + "error"
 	updaterErrorMetricKey  = "error"
+	idMetricName           = "id"
 )
 
 type DynamicConfigurable[Configuration any] interface {
@@ -24,31 +24,40 @@ type DynamicConfigurable[Configuration any] interface {
 }
 
 type DynamicConfigurationUpdater[Configuration any] struct {
-	defaultConfigurationString string
-	configurationFile          string
-	dynamicConfigurable        DynamicConfigurable[Configuration]
+	defaultConfigurationString   string
+	configurationFile            string
+	dynamicConfigurable          DynamicConfigurable[Configuration]
+	onConfigurationUpdateFailure func(error)
 
 	configuration Configuration
 	lock          sync.Mutex
 
-	metricFailedToUpdateDynamicConfiguration *metrics.LazyCounter
+	metricFailedToUpdateDynamicConfiguration *metrics_types.LazyCounter
 }
 
 func NewDynamicConfigurationUpdater[Configuration any](
+	id string,
 	vpr *viper.Viper,
 	defaultConfiguration string,
 	file string,
-	callback DynamicConfigurable[Configuration],
+	dynamicConfigurable DynamicConfigurable[Configuration],
+	onConfigurationUpdateFailure func(error),
 ) (*DynamicConfigurationUpdater[Configuration], error) {
-	metricFailedToUpdateDynamicConfiguration := agent_metrics.CreateErrorCounter(
+	metricFailedToUpdateDynamicConfiguration := metrics_factory.CreateErrorCounter(
 		updaterErrorMetricName,
-		map[string]string{updaterErrorMetricKey: "failed_to_update_dynamic_configuration", "filepath": file})
+		map[string]string{
+			updaterErrorMetricKey: "failed_to_update_dynamic_configuration",
+			"filepath":            file,
+			idMetricName:          id,
+		},
+	)
 
 	updater := &DynamicConfigurationUpdater[Configuration]{
 		defaultConfigurationString:               defaultConfiguration,
 		configurationFile:                        file,
-		dynamicConfigurable:                      callback,
+		dynamicConfigurable:                      dynamicConfigurable,
 		metricFailedToUpdateDynamicConfiguration: metricFailedToUpdateDynamicConfiguration,
+		onConfigurationUpdateFailure:             onConfigurationUpdateFailure,
 	}
 
 	if _, err := os.Stat(file); err != nil {
@@ -67,8 +76,8 @@ func NewDynamicConfigurationUpdater[Configuration any](
 	vpr.WatchConfig()
 	vpr.OnConfigChange(func(e fsnotify.Event) {
 		if err := updater.update(vpr); err != nil {
-			logger.Errorf("%#v", err)
 			metricFailedToUpdateDynamicConfiguration.Inc()
+			onConfigurationUpdateFailure(err)
 		}
 	})
 

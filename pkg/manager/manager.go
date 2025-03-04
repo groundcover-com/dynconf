@@ -7,14 +7,14 @@ import (
 	"strings"
 	"sync"
 
-	agent_metrics "github.com/groundcover-com/flora/pkg/metrics"
-	"github.com/groundcover-com/metrics"
+	metrics_factory "github.com/groundcover-com/metrics/pkg/factory"
+	metrics_types "github.com/groundcover-com/metrics/pkg/types"
 )
 
 const (
 	pathSeparator = "."
 
-	managerMetricPrefix    = agent_metrics.PromethuesMetricsPrefix + "config_dynamicmanager_"
+	managerMetricPrefix    = "dynconf_manager_"
 	managerErrorMetricName = managerMetricPrefix + "error"
 	managerErrorMetricKey  = "error"
 	managerIDMetricKey     = "id"
@@ -44,32 +44,32 @@ var (
 )
 
 type DynamicConfigurationManagerMetrics struct {
-	failedToRestore                    *metrics.LazyCounter
-	newPathConfigurationDoesNotExist   *metrics.LazyCounter
-	oldPathConfigurationDoesNotExist   *metrics.LazyCounter
-	moduleDoesNotAllowNewConfiguration *metrics.LazyCounter
-	invalidNewConfigurationType        *metrics.LazyCounter
+	failedToRestore                    *metrics_types.LazyCounter
+	newPathConfigurationDoesNotExist   *metrics_types.LazyCounter
+	oldPathConfigurationDoesNotExist   *metrics_types.LazyCounter
+	moduleDoesNotAllowNewConfiguration *metrics_types.LazyCounter
+	invalidNewConfigurationType        *metrics_types.LazyCounter
 }
 
 func NewDynamicConfigurationManagerMetrics(id string) *DynamicConfigurationManagerMetrics {
 	return &DynamicConfigurationManagerMetrics{
-		failedToRestore: agent_metrics.CreateErrorCounter(
+		failedToRestore: metrics_factory.CreateErrorCounter(
 			managerErrorMetricName,
 			map[string]string{managerErrorMetricKey: "failed_to_restore", managerIDMetricKey: id},
 		),
-		newPathConfigurationDoesNotExist: agent_metrics.CreateErrorCounter(
+		newPathConfigurationDoesNotExist: metrics_factory.CreateErrorCounter(
 			managerErrorMetricName,
 			map[string]string{managerErrorMetricKey: "new_path_configuration_does_not_exist", managerIDMetricKey: id},
 		),
-		oldPathConfigurationDoesNotExist: agent_metrics.CreateErrorCounter(
+		oldPathConfigurationDoesNotExist: metrics_factory.CreateErrorCounter(
 			managerErrorMetricName,
 			map[string]string{managerErrorMetricKey: "old_path_configuration_does_not_exist", managerIDMetricKey: id},
 		),
-		moduleDoesNotAllowNewConfiguration: agent_metrics.CreateErrorCounter(
+		moduleDoesNotAllowNewConfiguration: metrics_factory.CreateErrorCounter(
 			managerErrorMetricName,
 			map[string]string{managerErrorMetricKey: "module_does_not_allow_new_configuration", managerIDMetricKey: id},
 		),
-		invalidNewConfigurationType: agent_metrics.CreateErrorCounter(
+		invalidNewConfigurationType: metrics_factory.CreateErrorCounter(
 			managerErrorMetricName,
 			map[string]string{managerErrorMetricKey: "invalid_new_configuration_type", managerIDMetricKey: id},
 		),
