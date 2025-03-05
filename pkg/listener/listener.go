@@ -23,20 +23,18 @@ type DynamicConfigurable[Configuration any] interface {
 }
 
 type DynamicConfigurationListener[Configuration any] struct {
-	options                      *Options
-	dynamicConfigurable          DynamicConfigurable[Configuration]
-	onConfigurationUpdateFailure func(error)
+	dynamicConfigurable DynamicConfigurable[Configuration]
+	options             Options
 
 	configuration Configuration
-	lock          sync.Mutex
+	updateLock    sync.Mutex
 }
 
 func NewDynamicConfigurationListener[Configuration any](
 	id string,
-	options *Options,
 	file string,
 	dynamicConfigurable DynamicConfigurable[Configuration],
-	onConfigurationUpdateFailure func(error),
+	options Options,
 ) (*DynamicConfigurationListener[Configuration], error) {
 	metricFailedToUpdateDynamicConfiguration := metrics_factory.CreateErrorCounter(
 		listenerMetricName,
@@ -48,9 +46,8 @@ func NewDynamicConfigurationListener[Configuration any](
 	)
 
 	listener := &DynamicConfigurationListener[Configuration]{
-		options:                      options,
-		dynamicConfigurable:          dynamicConfigurable,
-		onConfigurationUpdateFailure: onConfigurationUpdateFailure,
+		options:             options,
+		dynamicConfigurable: dynamicConfigurable,
 	}
 
 	// To watch a configuration file with viper it has to exist when setting the watcher.
@@ -74,8 +71,8 @@ func NewDynamicConfigurationListener[Configuration any](
 	vpr.OnConfigChange(func(e fsnotify.Event) {
 		if err := listener.update(vpr); err != nil {
 			metricFailedToUpdateDynamicConfiguration.Inc()
-			if onConfigurationUpdateFailure != nil {
-				onConfigurationUpdateFailure(err)
+			if options.Callbacks.OnConfigurationUpdateFailure != nil {
+				options.Callbacks.OnConfigurationUpdateFailure(err)
 			}
 		}
 	})
@@ -88,8 +85,8 @@ func (listener *DynamicConfigurationListener[Configuration]) GetConfiguration() 
 }
 
 func (listener *DynamicConfigurationListener[Configuration]) update(vpr *viper.Viper) error {
-	listener.lock.Lock()
-	defer listener.lock.Unlock()
+	listener.updateLock.Lock()
+	defer listener.updateLock.Unlock()
 
 	if err := listener.options.DefaultConfiguration.Init(vpr); err != nil {
 		return fmt.Errorf("failed to initiate default configuration: %w", err)

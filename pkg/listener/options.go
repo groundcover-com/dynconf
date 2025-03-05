@@ -23,6 +23,7 @@ const (
 type Options struct {
 	Viper                ViperOptions
 	DefaultConfiguration DefaultConfigurationOptions
+	Callbacks            Callbacks
 }
 
 type DefaultConfigurationOptions struct {
@@ -78,4 +79,8 @@ func (options *ViperOptions) New() *viper.Viper {
 	vpr.SetConfigType(options.ConfigType)
 
 	return vpr
+}
+
+type Callbacks struct {
+	OnConfigurationUpdateFailure func(error)
 }
