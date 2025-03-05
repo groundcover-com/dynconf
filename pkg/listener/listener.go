@@ -61,6 +61,7 @@ func NewDynamicConfigurationListener[Configuration any](
 		onConfigurationUpdateFailure:             onConfigurationUpdateFailure,
 	}
 
+	// To watch a configuration file with viper it has to exist when setting the watcher.
 	if _, err := os.Stat(file); err != nil {
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("error checking file %s existence: %w", file, err)
