@@ -3,12 +3,10 @@ package listener
 import (
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	metrics_factory "github.com/groundcover-com/metrics/pkg/factory"
-	metrics_types "github.com/groundcover-com/metrics/pkg/types"
 	"github.com/spf13/viper"
 )
 
@@ -25,21 +23,17 @@ type DynamicConfigurable[Configuration any] interface {
 }
 
 type DynamicConfigurationListener[Configuration any] struct {
-	defaultConfigurationString   string
-	configurationFile            string
+	options                      *Options
 	dynamicConfigurable          DynamicConfigurable[Configuration]
 	onConfigurationUpdateFailure func(error)
 
 	configuration Configuration
 	lock          sync.Mutex
-
-	metricFailedToUpdateDynamicConfiguration *metrics_types.LazyCounter
 }
 
 func NewDynamicConfigurationListener[Configuration any](
 	id string,
-	vpr *viper.Viper,
-	defaultConfiguration string,
+	options *Options,
 	file string,
 	dynamicConfigurable DynamicConfigurable[Configuration],
 	onConfigurationUpdateFailure func(error),
@@ -54,11 +48,9 @@ func NewDynamicConfigurationListener[Configuration any](
 	)
 
 	listener := &DynamicConfigurationListener[Configuration]{
-		defaultConfigurationString:               defaultConfiguration,
-		configurationFile:                        file,
-		dynamicConfigurable:                      dynamicConfigurable,
-		metricFailedToUpdateDynamicConfiguration: metricFailedToUpdateDynamicConfiguration,
-		onConfigurationUpdateFailure:             onConfigurationUpdateFailure,
+		options:                      options,
+		dynamicConfigurable:          dynamicConfigurable,
+		onConfigurationUpdateFailure: onConfigurationUpdateFailure,
 	}
 
 	// To watch a configuration file with viper it has to exist when setting the watcher.
@@ -70,6 +62,9 @@ func NewDynamicConfigurationListener[Configuration any](
 			return nil, fmt.Errorf("error writing to file: %w", err)
 		}
 	}
+
+	vpr := options.Viper.New()
+	vpr.SetConfigFile(file)
 
 	if err := listener.update(vpr); err != nil {
 		return nil, fmt.Errorf("failed to update initial dynamic configuration: %w", err)
@@ -96,10 +91,10 @@ func (listener *DynamicConfigurationListener[Configuration]) update(vpr *viper.V
 	listener.lock.Lock()
 	defer listener.lock.Unlock()
 
-	var defaultConfig Configuration
-	listener.initConfigFromStringWithViper(vpr, listener.defaultConfigurationString, &defaultConfig)
+	if err := listener.options.DefaultConfiguration.Init(vpr); err != nil {
+		return fmt.Errorf("failed to initiate default configuration: %w", err)
+	}
 
-	vpr.SetConfigFile(listener.configurationFile)
 	if err := vpr.MergeInConfig(); err != nil {
 		return fmt.Errorf("error performing configuration merge: %w", err)
 	}
@@ -114,21 +109,5 @@ func (listener *DynamicConfigurationListener[Configuration]) update(vpr *viper.V
 	}
 
 	listener.configuration = mergedConfig
-	return nil
-}
-
-func (listener *DynamicConfigurationListener[Configuration]) initConfigFromStringWithViper(
-	vpr *viper.Viper,
-	source string,
-	out any,
-) error {
-	if err := vpr.ReadConfig(strings.NewReader(source)); err != nil {
-		return fmt.Errorf("configuration can't be loaded: %w", err)
-	}
-
-	if err := vpr.Unmarshal(out); err != nil {
-		return fmt.Errorf("failed to unmarshal configuration: %w", err)
-	}
-
 	return nil
 }
