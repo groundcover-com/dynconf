@@ -14,10 +14,10 @@ import (
 const (
 	pathSeparator = "."
 
-	managerMetricPrefix    = "dynconf_manager_"
-	managerErrorMetricName = managerMetricPrefix + "error"
-	managerErrorMetricKey  = "error"
-	managerIDMetricKey     = "id"
+	managerMetricPrefix = "dynconf_manager_"
+	errorMetricName     = managerMetricPrefix + "error"
+	errorMetricKey      = "error"
+	idMetricKey         = "id"
 )
 
 var (
@@ -54,24 +54,24 @@ type DynamicConfigurationManagerMetrics struct {
 func NewDynamicConfigurationManagerMetrics(id string) *DynamicConfigurationManagerMetrics {
 	return &DynamicConfigurationManagerMetrics{
 		failedToRestore: metrics_factory.CreateErrorCounter(
-			managerErrorMetricName,
-			map[string]string{managerErrorMetricKey: "failed_to_restore", managerIDMetricKey: id},
+			errorMetricName,
+			map[string]string{errorMetricKey: "failed_to_restore", idMetricKey: id},
 		),
 		newPathConfigurationDoesNotExist: metrics_factory.CreateErrorCounter(
-			managerErrorMetricName,
-			map[string]string{managerErrorMetricKey: "new_path_configuration_does_not_exist", managerIDMetricKey: id},
+			errorMetricName,
+			map[string]string{errorMetricKey: "new_path_configuration_does_not_exist", idMetricKey: id},
 		),
 		oldPathConfigurationDoesNotExist: metrics_factory.CreateErrorCounter(
-			managerErrorMetricName,
-			map[string]string{managerErrorMetricKey: "old_path_configuration_does_not_exist", managerIDMetricKey: id},
+			errorMetricName,
+			map[string]string{errorMetricKey: "old_path_configuration_does_not_exist", idMetricKey: id},
 		),
 		moduleDoesNotAllowNewConfiguration: metrics_factory.CreateErrorCounter(
-			managerErrorMetricName,
-			map[string]string{managerErrorMetricKey: "module_does_not_allow_new_configuration", managerIDMetricKey: id},
+			errorMetricName,
+			map[string]string{errorMetricKey: "module_does_not_allow_new_configuration", idMetricKey: id},
 		),
 		invalidNewConfigurationType: metrics_factory.CreateErrorCounter(
-			managerErrorMetricName,
-			map[string]string{managerErrorMetricKey: "invalid_new_configuration_type", managerIDMetricKey: id},
+			errorMetricName,
+			map[string]string{errorMetricKey: "invalid_new_configuration_type", idMetricKey: id},
 		),
 	}
 }

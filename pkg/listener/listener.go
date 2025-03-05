@@ -1,4 +1,4 @@
-package updater
+package listener
 
 import (
 	"fmt"
@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	updaterMetricPrefix    = "dynconf_updater_"
-	updaterErrorMetricName = updaterMetricPrefix + "error"
-	updaterErrorMetricKey  = "error"
-	idMetricName           = "id"
+	listenerMetricPrefix = "dynconf_listener_"
+	listenerMetricName   = listenerMetricPrefix + "error"
+	listenerMetricKey    = "error"
+	idMetricKey          = "id"
+	filepathMetricKey    = "filepath"
 )
 
 type DynamicConfigurable[Configuration any] interface {
@@ -44,11 +45,11 @@ func NewDynamicConfigurationListener[Configuration any](
 	onConfigurationUpdateFailure func(error),
 ) (*DynamicConfigurationListener[Configuration], error) {
 	metricFailedToUpdateDynamicConfiguration := metrics_factory.CreateErrorCounter(
-		updaterErrorMetricName,
+		listenerMetricName,
 		map[string]string{
-			updaterErrorMetricKey: "failed_to_update_dynamic_configuration",
-			"filepath":            file,
-			idMetricName:          id,
+			listenerMetricKey: "failed_to_update_dynamic_configuration",
+			filepathMetricKey: file,
+			idMetricKey:       id,
 		},
 	)
 
@@ -86,18 +87,18 @@ func NewDynamicConfigurationListener[Configuration any](
 	return listener, nil
 }
 
-func (updater *DynamicConfigurationListener[Configuration]) GetConfiguration() Configuration {
-	return updater.configuration
+func (listener *DynamicConfigurationListener[Configuration]) GetConfiguration() Configuration {
+	return listener.configuration
 }
 
-func (updater *DynamicConfigurationListener[Configuration]) update(vpr *viper.Viper) error {
-	updater.lock.Lock()
-	defer updater.lock.Unlock()
+func (listener *DynamicConfigurationListener[Configuration]) update(vpr *viper.Viper) error {
+	listener.lock.Lock()
+	defer listener.lock.Unlock()
 
 	var defaultConfig Configuration
-	updater.initConfigFromStringWithViper(vpr, updater.defaultConfigurationString, &defaultConfig)
+	listener.initConfigFromStringWithViper(vpr, listener.defaultConfigurationString, &defaultConfig)
 
-	vpr.SetConfigFile(updater.configurationFile)
+	vpr.SetConfigFile(listener.configurationFile)
 	if err := vpr.MergeInConfig(); err != nil {
 		return fmt.Errorf("error performing configuration merge: %w", err)
 	}
@@ -107,15 +108,15 @@ func (updater *DynamicConfigurationListener[Configuration]) update(vpr *viper.Vi
 		return fmt.Errorf("failed to unmarshal merged configuration: %w", err)
 	}
 
-	if err := updater.dynamicConfigurable.OnConfigurationUpdate(mergedConfig); err != nil {
+	if err := listener.dynamicConfigurable.OnConfigurationUpdate(mergedConfig); err != nil {
 		return fmt.Errorf("failed to update configuration: %w", err)
 	}
 
-	updater.configuration = mergedConfig
+	listener.configuration = mergedConfig
 	return nil
 }
 
-func (updater *DynamicConfigurationListener[Configuration]) initConfigFromStringWithViper(
+func (listener *DynamicConfigurationListener[Configuration]) initConfigFromStringWithViper(
 	vpr *viper.Viper,
 	source string,
 	out any,
