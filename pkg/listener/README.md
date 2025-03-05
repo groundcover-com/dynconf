@@ -15,7 +15,7 @@ type Config struct { /* configuration struct here */ }
 var defaultConfig string
 
 listener, err := NewDynamicConfigurationListener[Config](
-    "config",
+    "id",
     "config.yaml",
     DynamicConfigurationManager,
     Options{
