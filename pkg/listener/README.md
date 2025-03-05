@@ -5,30 +5,30 @@ The `Dynamic Configuration Updater` listens on updates to a configuration file, 
 This works using [viper](github.com/spf13/viper)'s abilities to listen to file updates and to merge configurations.
 Using viper also allows further abilities. For example, if the `viper` object used is configured to have environment variables overrides, they will also override any dynamic configuration.
 
-A simple example, using a [Dynamic Configuration Manager](/pkg/manager) as the object to be notified on configuration update:
+Below is a simple example, using a [Dynamic Configuration Manager](/pkg/manager) as the object to be notified on configuration update.
+Assuming no error occurred, DynamicConfigurationManager receives an the initial configuration when the initiation occurs, and from that moment, further updates whenever the configuration file is updated.
 
 ```go
-type Config struct { /* configuration here */ }
+type Config struct { /* configuration struct here */ }
 
 //go:embed default_config.yaml
 var defaultConfig string
 
-vpr := viper.New()
-vpr.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-vpr.SetEnvPrefix("ENV")
-vpr.AutomaticEnv()
-vpr.SetConfigType("yaml")
-
-// This will be called on errors, for example if illegal configuration is written to the file.
-onUpdateErrorCallback := func(error){}
-
 listener, err := NewDynamicConfigurationListener[Config](
-    vpr,
-    defaultConfig,
+    "config",
     "config.yaml",
     DynamicConfigurationManager,
-    onUpdateErrorCallback,
+    Options{
+        Viper: ViperOptions{
+            EnvKeyReplacer: strings.NewReplacer(".", "_"),
+            EnvPrefix: "ENV",
+            AutomaticEnv: true,
+            ConfigType: "yaml",
+        },
+        DefaultConfiguration: DefaultConfigurationOptions{
+            Type: DefaultConfigurationTypeString,
+            String: defaultConfig,
+        }
+    },
 )
-
-// assuming no error occurred, from this moment, DynamicConfigurationManager receives updates when "config.yaml" is edited.
 ```
