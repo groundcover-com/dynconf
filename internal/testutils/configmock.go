@@ -59,7 +59,6 @@ func RandomMockConfigurationWithDuplicates() MockConfigurationWithDuplicates {
 
 func RandomMockConfigurationWithTypedef() MockConfigurationWithTypedef {
 	return MockConfigurationWithTypedef{
-		// all ways to initiate values are fine
 		A2: MockConfigurationA2(MockConfigurationA{Value: randomString()}),
 		A3: MockConfigurationA3{Value: randomString()},
 		A4: MockConfigurationA4(MockConfigurationA2{Value: randomString()}),
