@@ -308,5 +308,9 @@ func pathToString(path []string) string {
 }
 
 func stringToPath(str string) []string {
+	if str == "" {
+		return make([]string, 0)
+	}
+
 	return strings.Split(str, pathSeparator)
 }

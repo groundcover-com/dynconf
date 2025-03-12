@@ -2,86 +2,20 @@ package manager_test
 
 import (
 	"errors"
-	"math/rand"
 	"reflect"
 	"testing"
 
+	"github.com/groundcover-com/dynconf/internal/testutils"
 	"github.com/groundcover-com/dynconf/pkg/manager"
 )
 
-type MockConfigurationA struct {
-	Value string
-}
-
-type MockConfigurationA2 MockConfigurationA
-type MockConfigurationA3 MockConfigurationA
-type MockConfigurationA4 MockConfigurationA
-
-type MockConfigurationB struct {
-	Value bool
-}
-
-type MockConfigurationWithTypedef struct {
-	A2 MockConfigurationA2
-	A3 MockConfigurationA3
-	A4 MockConfigurationA4
-}
-
-type MockConfigurationWithOneDepthLevel struct {
-	A MockConfigurationA
-	B MockConfigurationB
-}
-
-type MockConfigurationWithDuplicates struct {
-	A  MockConfigurationA
-	A2 MockConfigurationA
-	B  MockConfigurationB
-}
-
-func randomString() string {
-	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	result := make([]byte, 5)
-	for i := range result {
-		result[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(result)
-}
-
-func randomBool() bool {
-	return rand.Intn(2) == 0
-}
-
-func randomMockConfigurationWithDuplicates() MockConfigurationWithDuplicates {
-	return MockConfigurationWithDuplicates{
-		A:  MockConfigurationA{Value: randomString()},
-		A2: MockConfigurationA{Value: randomString()},
-		B:  MockConfigurationB{Value: randomBool()},
-	}
-}
-
-func randomMockConfigurationWithTypedef() MockConfigurationWithTypedef {
-	return MockConfigurationWithTypedef{
-		// all ways to initiate values are fine
-		A2: MockConfigurationA2(MockConfigurationA{Value: randomString()}),
-		A3: MockConfigurationA3{Value: randomString()},
-		A4: MockConfigurationA4(MockConfigurationA2{Value: randomString()}),
-	}
-}
-
-func randomMockConfigurationWithOneDepthLevel() MockConfigurationWithOneDepthLevel {
-	return MockConfigurationWithOneDepthLevel{
-		A: MockConfigurationA{Value: randomString()},
-		B: MockConfigurationB{Value: randomBool()},
-	}
-}
-
 func newInitiatedConfigurationManagerWithOneDepthLevel(id string) (
-	*manager.DynamicConfigurationManager[MockConfigurationWithOneDepthLevel],
-	MockConfigurationWithOneDepthLevel,
+	*manager.DynamicConfigurationManager[testutils.MockConfigurationWithOneDepthLevel],
+	testutils.MockConfigurationWithOneDepthLevel,
 	error,
 ) {
-	mgr := manager.NewDynamicConfigurationManager[MockConfigurationWithOneDepthLevel](id)
-	mockConfiguration := randomMockConfigurationWithOneDepthLevel()
+	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithOneDepthLevel](id)
+	mockConfiguration := testutils.RandomMockConfigurationWithOneDepthLevel()
 	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
 		return nil, mockConfiguration, err
 	}
@@ -90,24 +24,24 @@ func newInitiatedConfigurationManagerWithOneDepthLevel(id string) (
 }
 
 func TestConfigurationWithDuplicates(t *testing.T) {
-	mgr := manager.NewDynamicConfigurationManager[MockConfigurationWithDuplicates]("testDuplicates")
-	mockConfiguration := randomMockConfigurationWithDuplicates()
+	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithDuplicates]("testDuplicates")
+	mockConfiguration := testutils.RandomMockConfigurationWithDuplicates()
 
 	err := mgr.OnConfigurationUpdate(mockConfiguration)
 	if err != nil {
 		t.Fatalf("failed to initiate configuration that has duplicates: %v", err)
 	}
 
-	copyConfiguration := MockConfigurationWithDuplicates{}
-	callbackA := func(cfg MockConfigurationA) error {
+	copyConfiguration := testutils.MockConfigurationWithDuplicates{}
+	callbackA := func(cfg testutils.MockConfigurationA) error {
 		copyConfiguration.A = cfg
 		return nil
 	}
-	callbackA2 := func(cfg MockConfigurationA) error {
+	callbackA2 := func(cfg testutils.MockConfigurationA) error {
 		copyConfiguration.A2 = cfg
 		return nil
 	}
-	callbackB := func(cfg MockConfigurationB) error {
+	callbackB := func(cfg testutils.MockConfigurationB) error {
 		copyConfiguration.B = cfg
 		return nil
 	}
@@ -132,7 +66,7 @@ func TestConfigurationWithDuplicates(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration, mockConfiguration) {
 		t.Fatalf(
-			"After updating configuration, expected %#v but got %#v",
+			"after updating configuration, expected %#v but got %#v",
 			mockConfiguration,
 			copyConfiguration,
 		)
@@ -140,24 +74,24 @@ func TestConfigurationWithDuplicates(t *testing.T) {
 }
 
 func TestConfigurationWithTypedef(t *testing.T) {
-	mgr := manager.NewDynamicConfigurationManager[MockConfigurationWithTypedef]("testTypedef")
-	mockConfiguration := randomMockConfigurationWithTypedef()
+	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTypedef]("testTypedef")
+	mockConfiguration := testutils.RandomMockConfigurationWithTypedef()
 
 	err := mgr.OnConfigurationUpdate(mockConfiguration)
 	if err != nil {
 		t.Fatalf("failed to initiate configuration that has typedef: %v", err)
 	}
 
-	copyConfiguration := MockConfigurationWithTypedef{}
-	callbackA4 := func(cfg MockConfigurationA4) error {
+	copyConfiguration := testutils.MockConfigurationWithTypedef{}
+	callbackA4 := func(cfg testutils.MockConfigurationA4) error {
 		copyConfiguration.A4 = cfg
 		return nil
 	}
-	callbackA3 := func(cfg MockConfigurationA3) error {
+	callbackA3 := func(cfg testutils.MockConfigurationA3) error {
 		copyConfiguration.A3 = cfg
 		return nil
 	}
-	callbackA2 := func(cfg MockConfigurationA2) error {
+	callbackA2 := func(cfg testutils.MockConfigurationA2) error {
 		copyConfiguration.A2 = cfg
 		return nil
 	}
@@ -182,7 +116,7 @@ func TestConfigurationWithTypedef(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration, mockConfiguration) {
 		t.Fatalf(
-			"After updating configuration, expected %#v but got %#v",
+			"after updating configuration, expected %#v but got %#v",
 			mockConfiguration,
 			copyConfiguration,
 		)
@@ -195,7 +129,7 @@ func TestRegisterOnPathThatIsNotInTheConfiguration(t *testing.T) {
 		t.Fatalf("failed to initiate configuration: %#v", err)
 	}
 
-	callbackA4 := func(cfg MockConfigurationA4) error {
+	callbackA4 := func(cfg testutils.MockConfigurationA4) error {
 		return nil
 	}
 
@@ -214,8 +148,8 @@ func TestChangeConfigurationAfterInitiatingButBeforeRegistering(t *testing.T) {
 		t.Fatalf("failed to initiate configuration: %#v", err)
 	}
 
-	copyConfiguration := MockConfigurationWithOneDepthLevel{}
-	callbackB := func(cfg MockConfigurationB) error {
+	copyConfiguration := testutils.MockConfigurationWithOneDepthLevel{}
+	callbackB := func(cfg testutils.MockConfigurationB) error {
 		copyConfiguration.B = cfg
 		return nil
 	}
@@ -232,7 +166,7 @@ func TestChangeConfigurationAfterInitiatingButBeforeRegistering(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration.B, mockConfiguration.B) {
 		t.Fatalf(
-			"After registering mock configuration, expected %#v but got %#v",
+			"after registering mock configuration, expected %#v but got %#v",
 			mockConfiguration.B,
 			copyConfiguration.B,
 		)
@@ -245,7 +179,7 @@ func TestRegisterCallbackThatReceivesWrongArgumentType(t *testing.T) {
 		t.Fatalf("failed to initiate configuration: %#v", err)
 	}
 
-	callbackA := func(cfg MockConfigurationA) error {
+	callbackA := func(cfg testutils.MockConfigurationA) error {
 		return nil
 	}
 
@@ -266,13 +200,13 @@ func TestRestoration(t *testing.T) {
 	}
 
 	origConfiguration := mockConfiguration
-	copyConfiguration := MockConfigurationWithOneDepthLevel{}
+	copyConfiguration := testutils.MockConfigurationWithOneDepthLevel{}
 
 	shouldFail := false
 	initialA := true
 	initialB := true
 	totalUpdates := 0
-	callbackA := func(cfg MockConfigurationA) error {
+	callbackA := func(cfg testutils.MockConfigurationA) error {
 		if initialA {
 			initialA = false
 			copyConfiguration.A = cfg
@@ -287,7 +221,7 @@ func TestRestoration(t *testing.T) {
 		shouldFail = true
 		return nil
 	}
-	callbackB := func(cfg MockConfigurationB) error {
+	callbackB := func(cfg testutils.MockConfigurationB) error {
 		if initialB {
 			initialB = false
 			copyConfiguration.B = cfg
@@ -313,7 +247,7 @@ func TestRestoration(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration.A, mockConfiguration.A) {
 		t.Fatalf(
-			"After registering mock configuration A, expected %#v but got %#v",
+			"after registering mock configuration A, expected %#v but got %#v",
 			mockConfiguration.A,
 			copyConfiguration.A,
 		)
@@ -321,7 +255,7 @@ func TestRestoration(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration.B, mockConfiguration.B) {
 		t.Fatalf(
-			"After registering mock configuration B, expected %#v but got %#v",
+			"after registering mock configuration B, expected %#v but got %#v",
 			mockConfiguration.B,
 			copyConfiguration.B,
 		)
@@ -339,12 +273,12 @@ func TestRestoration(t *testing.T) {
 	}
 
 	if totalUpdates != 2 {
-		t.Fatalf("After failing to update illegal configuration, total updates %d (expected %d)", totalUpdates, 2)
+		t.Fatalf("after failing to update illegal configuration, total updates %d (expected %d)", totalUpdates, 2)
 	}
 
 	if !reflect.DeepEqual(copyConfiguration, origConfiguration) {
 		t.Fatalf(
-			"After failing to update to illegal configuration, expected restoration to original %#v but got %#v",
+			"after failing to update to illegal configuration, expected restoration to original %#v but got %#v",
 			origConfiguration.A,
 			copyConfiguration.A,
 		)
@@ -357,12 +291,12 @@ func TestChangeConfigurationOfTwoTypes(t *testing.T) {
 		t.Fatalf("failed to initiate configuration: %#v", err)
 	}
 
-	copyConfiguration := MockConfigurationWithOneDepthLevel{}
-	callbackA := func(cfg MockConfigurationA) error {
+	copyConfiguration := testutils.MockConfigurationWithOneDepthLevel{}
+	callbackA := func(cfg testutils.MockConfigurationA) error {
 		copyConfiguration.A = cfg
 		return nil
 	}
-	callbackB := func(cfg MockConfigurationB) error {
+	callbackB := func(cfg testutils.MockConfigurationB) error {
 		copyConfiguration.B = cfg
 		return nil
 	}
@@ -373,7 +307,7 @@ func TestChangeConfigurationOfTwoTypes(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration.A, mockConfiguration.A) {
 		t.Fatalf(
-			"After registering mock configuration A, expected %#v but got %#v",
+			"after registering mock configuration A, expected %#v but got %#v",
 			mockConfiguration.A,
 			copyConfiguration.A,
 		)
@@ -386,7 +320,7 @@ func TestChangeConfigurationOfTwoTypes(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration.A, mockConfiguration.A) {
 		t.Fatalf(
-			"After updating mock configuration A, expected %#v but got %#v",
+			"after updating mock configuration A, expected %#v but got %#v",
 			mockConfiguration.A,
 			copyConfiguration.A,
 		)
@@ -398,7 +332,7 @@ func TestChangeConfigurationOfTwoTypes(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration.B, mockConfiguration.B) {
 		t.Fatalf(
-			"After registering mock configuration B, expected %#v but got %#v",
+			"after registering mock configuration B, expected %#v but got %#v",
 			mockConfiguration.B,
 			copyConfiguration.B,
 		)
@@ -413,7 +347,7 @@ func TestChangeConfigurationOfTwoTypes(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration, mockConfiguration) {
 		t.Fatalf(
-			"After updating mock configuration, expected %#v but got %#v",
+			"after updating mock configuration, expected %#v but got %#v",
 			mockConfiguration,
 			copyConfiguration,
 		)
@@ -426,15 +360,15 @@ func TestChangeConfigurationOnlyTriggersAlteredCallbacks(t *testing.T) {
 		t.Fatalf("failed to initiate configuration: %#v", err)
 	}
 
-	copyConfiguration := MockConfigurationWithOneDepthLevel{}
+	copyConfiguration := testutils.MockConfigurationWithOneDepthLevel{}
 	timesA := 0
-	callbackA := func(cfg MockConfigurationA) error {
+	callbackA := func(cfg testutils.MockConfigurationA) error {
 		timesA++
 		copyConfiguration.A = cfg
 		return nil
 	}
 	timesB := 0
-	callbackB := func(cfg MockConfigurationB) error {
+	callbackB := func(cfg testutils.MockConfigurationB) error {
 		timesB++
 		copyConfiguration.B = cfg
 		return nil
@@ -450,7 +384,7 @@ func TestChangeConfigurationOnlyTriggersAlteredCallbacks(t *testing.T) {
 
 	if !reflect.DeepEqual(copyConfiguration, mockConfiguration) {
 		t.Fatalf(
-			"After registering mock configuration elements, expected %#v but got %#v",
+			"after registering mock configuration elements, expected %#v but got %#v",
 			mockConfiguration,
 			copyConfiguration,
 		)

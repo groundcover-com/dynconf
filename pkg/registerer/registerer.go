@@ -22,10 +22,10 @@ func (registerer *DynamicConfigurationRegisterer) Register(callback any) error {
 
 func (registerer *DynamicConfigurationRegisterer) Under(under string) *DynamicConfigurationRegisterer {
 	p := make([]string, 0, len(registerer.prefix)+1)
-	for i, v := range registerer.prefix {
-		p[i] = v
+	for _, v := range registerer.prefix {
+		p = append(p, v)
 	}
-	p[len(registerer.prefix)] = under
+	p = append(p, under)
 
 	return &DynamicConfigurationRegisterer{
 		registerable: registerer.registerable,
