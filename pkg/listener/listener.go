@@ -88,8 +88,8 @@ func (listener *DynamicConfigurationListener[Configuration]) update(vpr *viper.V
 	listener.updateLock.Lock()
 	defer listener.updateLock.Unlock()
 
-	if err := listener.options.DefaultConfiguration.Init(vpr); err != nil {
-		return fmt.Errorf("failed to initiate default configuration: %w", err)
+	if err := listener.options.BaseConfiguration.Init(vpr); err != nil {
+		return fmt.Errorf("failed to initiate base configuration: %w", err)
 	}
 
 	if err := vpr.MergeInConfig(); err != nil {

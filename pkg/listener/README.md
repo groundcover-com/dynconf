@@ -1,6 +1,6 @@
 # Dynamic Configuration Updater
 
-The `Dynamic Configuration Updater` listens on updates to a configuration file, merges them onto a default configuration, and notifies that the configuration has been updated.
+The `Dynamic Configuration Updater` listens on updates to a configuration file, merges them onto a base configuration, and notifies that the configuration has been updated.
 
 This works using [viper](github.com/spf13/viper)'s abilities to listen to file updates and to merge configurations.
 Using viper also allows further abilities. For example, if the `viper` object used is configured to have environment variables overrides, they will also override any dynamic configuration.
@@ -11,8 +11,8 @@ Assuming no error occurred, DynamicConfigurationManager receives an the initial 
 ```go
 type Config struct { /* configuration struct here */ }
 
-//go:embed default_config.yaml
-var defaultConfig string
+//go:embed base_config.yaml
+var baseConfig string
 
 listener, err := NewDynamicConfigurationListener[Config](
     "id",
@@ -25,9 +25,9 @@ listener, err := NewDynamicConfigurationListener[Config](
             AutomaticEnv: true,
             ConfigType: "yaml",
         },
-        DefaultConfiguration: DefaultConfigurationOptions{
-            Type: DefaultConfigurationTypeString,
-            String: defaultConfig,
+        BaseConfiguration: BaseConfigurationOptions{
+            Type: BaseConfigurationTypeString,
+            String: baseConfig,
         }
     },
 )

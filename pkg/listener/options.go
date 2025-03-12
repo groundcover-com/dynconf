@@ -10,37 +10,39 @@ import (
 )
 
 var (
-	ErrInvalidDefaultConfigurationType = errors.New("invalid default configuration type")
+	ErrInvalidBaseConfigurationType = errors.New("invalid default configuration type")
 )
 
-type DefaultConfigurationType uint32
+type BaseConfigurationType uint32
 
 const (
-	DefaultConfigurationTypeString DefaultConfigurationType = iota
-	DefaultConfigurationTypeFile
+	BaseConfigurationTypeString BaseConfigurationType = iota
+	BaseConfigurationTypeFile
 )
 
 type Options struct {
-	Viper                ViperOptions
-	DefaultConfiguration DefaultConfigurationOptions
-	Callbacks            Callbacks
+	Viper ViperOptions
+	// The base configuration is the configuration that you start with. Its options define things like where it
+	// originates from (etc. a file or a string).
+	BaseConfiguration BaseConfigurationOptions
+	Callbacks         Callbacks
 }
 
-type DefaultConfigurationOptions struct {
-	Type   DefaultConfigurationType
+type BaseConfigurationOptions struct {
+	Type   BaseConfigurationType
 	String string
 	File   string
 }
 
-func (options *DefaultConfigurationOptions) Init(vpr *viper.Viper) error {
-	if options.Type == DefaultConfigurationTypeString {
+func (options *BaseConfigurationOptions) Init(vpr *viper.Viper) error {
+	if options.Type == BaseConfigurationTypeString {
 		if err := vpr.ReadConfig(strings.NewReader(options.String)); err != nil {
-			return fmt.Errorf("default configuration can't be loaded from string: %w", err)
+			return fmt.Errorf("base configuration can't be loaded from string: %w", err)
 		}
 		return nil
 	}
 
-	if options.Type == DefaultConfigurationTypeFile {
+	if options.Type == BaseConfigurationTypeFile {
 		file, err := os.Open(options.File)
 		if err != nil {
 			return fmt.Errorf("error opening file: %w", err)
@@ -48,12 +50,12 @@ func (options *DefaultConfigurationOptions) Init(vpr *viper.Viper) error {
 		defer file.Close()
 
 		if err := vpr.ReadConfig(file); err != nil {
-			return fmt.Errorf("default configuration can't be loaded from file: %w", err)
+			return fmt.Errorf("base configuration can't be loaded from file: %w", err)
 		}
 		return nil
 	}
 
-	return ErrInvalidDefaultConfigurationType
+	return ErrInvalidBaseConfigurationType
 }
 
 type ViperOptions struct {
