@@ -94,11 +94,48 @@ func TestConfigurationWithDuplicates(t *testing.T) {
 	mockConfiguration := randomMockConfigurationWithDuplicates()
 
 	err := mgr.OnConfigurationUpdate(mockConfiguration)
-	if err == nil {
-		t.Fatalf("failed to detect that configuration has duplicates")
+	if err != nil {
+		t.Fatalf("failed to initiate configuration that has duplicates: %v", err)
 	}
-	if !errors.Is(err, manager.ErrConfigurationHasDuplicates) {
-		t.Fatalf("wrong error when configuration has duplicates: %#v", err)
+
+	copyConfiguration := MockConfigurationWithDuplicates{}
+	callbackA := func(cfg MockConfigurationA) error {
+		copyConfiguration.A = cfg
+		return nil
+	}
+	callbackA2 := func(cfg MockConfigurationA) error {
+		copyConfiguration.A2 = cfg
+		return nil
+	}
+	callbackB := func(cfg MockConfigurationB) error {
+		copyConfiguration.B = cfg
+		return nil
+	}
+
+	if err := mgr.Register([]string{"A"}, callbackA); err != nil {
+		t.Fatalf("failed to register mock configuration A: %#v", err)
+	}
+	if err := mgr.Register([]string{"A2"}, callbackA2); err != nil {
+		t.Fatalf("failed to register mock configuration A2: %#v", err)
+	}
+	if err := mgr.Register([]string{"B"}, callbackB); err != nil {
+		t.Fatalf("failed to register mock configuration B: %#v", err)
+	}
+
+	mockConfiguration.A.Value += "bla4"
+	mockConfiguration.A2.Value += "bla3"
+	mockConfiguration.B.Value = !mockConfiguration.B.Value
+
+	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
+		t.Fatalf("failed to update configuration: %#v", err)
+	}
+
+	if !reflect.DeepEqual(copyConfiguration, mockConfiguration) {
+		t.Fatalf(
+			"After updating configuration, expected %#v but got %#v",
+			mockConfiguration,
+			copyConfiguration,
+		)
 	}
 }
 
@@ -108,7 +145,7 @@ func TestConfigurationWithTypedef(t *testing.T) {
 
 	err := mgr.OnConfigurationUpdate(mockConfiguration)
 	if err != nil {
-		t.Fatalf("failed to initiate configuration that has typedef")
+		t.Fatalf("failed to initiate configuration that has typedef: %v", err)
 	}
 
 	copyConfiguration := MockConfigurationWithTypedef{}
@@ -125,17 +162,17 @@ func TestConfigurationWithTypedef(t *testing.T) {
 		return nil
 	}
 
-	if err := mgr.Register(MockConfigurationA4{}, callbackA4); err != nil {
+	if err := mgr.Register([]string{"A4"}, callbackA4); err != nil {
 		t.Fatalf("failed to register mock configuration A4: %#v", err)
 	}
-	if err := mgr.Register(MockConfigurationA3{}, callbackA3); err != nil {
+	if err := mgr.Register([]string{"A3"}, callbackA3); err != nil {
 		t.Fatalf("failed to register mock configuration A3: %#v", err)
 	}
-	if err := mgr.Register(MockConfigurationA2{}, callbackA2); err != nil {
+	if err := mgr.Register([]string{"A2"}, callbackA2); err != nil {
 		t.Fatalf("failed to register mock configuration A2: %#v", err)
 	}
 
-	mockConfiguration.A3.Value += "bla4"
+	mockConfiguration.A4.Value += "bla4"
 	mockConfiguration.A3.Value += "bla3"
 	mockConfiguration.A2.Value += "bla2"
 
@@ -152,7 +189,7 @@ func TestConfigurationWithTypedef(t *testing.T) {
 	}
 }
 
-func TestRegisterOnItemThatIsNotInTheConfiguration(t *testing.T) {
+func TestRegisterOnPathThatIsNotInTheConfiguration(t *testing.T) {
 	mgr, _, err := newInitiatedConfigurationManagerWithOneDepthLevel("registerItemNotInConf")
 	if err != nil {
 		t.Fatalf("failed to initiate configuration: %#v", err)
@@ -162,11 +199,11 @@ func TestRegisterOnItemThatIsNotInTheConfiguration(t *testing.T) {
 		return nil
 	}
 
-	err = mgr.Register(MockConfigurationA4{}, callbackA4)
+	err = mgr.Register([]string{"A4"}, callbackA4)
 	if err == nil {
-		t.Fatalf("succeeded registering on item that is not in the configuration")
+		t.Fatalf("succeeded registering on path that is not in the configuration")
 	}
-	if !errors.Is(err, manager.ErrNoMatchingTypeFound) {
+	if !errors.Is(err, manager.ErrNoMatchingFieldFound) {
 		t.Fatalf("wrong error when registering on item that is not in the configuration: %#v", err)
 	}
 }
@@ -189,7 +226,7 @@ func TestChangeConfigurationAfterInitiatingButBeforeRegistering(t *testing.T) {
 		t.Fatalf("failed to update configuration: %#v", err)
 	}
 
-	if err := mgr.Register(MockConfigurationB{}, callbackB); err != nil {
+	if err := mgr.Register([]string{"B"}, callbackB); err != nil {
 		t.Fatalf("failed to register mock configuration: %#v", err)
 	}
 
@@ -212,7 +249,7 @@ func TestRegisterCallbackThatReceivesWrongArgumentType(t *testing.T) {
 		return nil
 	}
 
-	err = mgr.Register(MockConfigurationB{}, callbackA)
+	err = mgr.Register([]string{"B"}, callbackA)
 	if err == nil {
 		t.Fatalf("Success error when registering bad callback")
 	}
@@ -266,11 +303,11 @@ func TestRestoration(t *testing.T) {
 		return nil
 	}
 
-	if err := mgr.Register(MockConfigurationA{}, callbackA); err != nil {
+	if err := mgr.Register([]string{"A"}, callbackA); err != nil {
 		t.Fatalf("failed to register mock configuration A: %#v", err)
 	}
 
-	if err := mgr.Register(MockConfigurationB{}, callbackB); err != nil {
+	if err := mgr.Register([]string{"B"}, callbackB); err != nil {
 		t.Fatalf("failed to register mock configuration B: %#v", err)
 	}
 
@@ -330,7 +367,7 @@ func TestChangeConfigurationOfTwoTypes(t *testing.T) {
 		return nil
 	}
 
-	if err := mgr.Register(MockConfigurationA{}, callbackA); err != nil {
+	if err := mgr.Register([]string{"A"}, callbackA); err != nil {
 		t.Fatalf("failed to register mock configuration A: %#v", err)
 	}
 
@@ -355,7 +392,7 @@ func TestChangeConfigurationOfTwoTypes(t *testing.T) {
 		)
 	}
 
-	if err := mgr.Register(MockConfigurationB{}, callbackB); err != nil {
+	if err := mgr.Register([]string{"B"}, callbackB); err != nil {
 		t.Fatalf("failed to register mock configuration B: %#v", err)
 	}
 
@@ -403,11 +440,11 @@ func TestChangeConfigurationOnlyTriggersAlteredCallbacks(t *testing.T) {
 		return nil
 	}
 
-	if err := mgr.Register(MockConfigurationA{}, callbackA); err != nil {
+	if err := mgr.Register([]string{"A"}, callbackA); err != nil {
 		t.Fatalf("failed to register mock configuration A: %#v", err)
 	}
 
-	if err := mgr.Register(MockConfigurationB{}, callbackB); err != nil {
+	if err := mgr.Register([]string{"B"}, callbackB); err != nil {
 		t.Fatalf("failed to register mock configuration B: %#v", err)
 	}
 
