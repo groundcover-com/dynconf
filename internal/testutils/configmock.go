@@ -25,6 +25,15 @@ type MockConfigurationWithOneDepthLevel struct {
 	B MockConfigurationB
 }
 
+type MockConfigurationWithA struct {
+	A MockConfigurationA
+}
+
+type MockConfigurationWithPointer struct {
+	PtrWithA  *MockConfigurationWithA
+	PtrWithA2 *MockConfigurationWithA
+}
+
 type MockConfigurationWithDuplicates struct {
 	A  MockConfigurationA
 	A2 MockConfigurationA
@@ -69,6 +78,23 @@ func RandomMockConfigurationWithOneDepthLevel() MockConfigurationWithOneDepthLev
 	return MockConfigurationWithOneDepthLevel{
 		A: MockConfigurationA{Value: randomString()},
 		B: MockConfigurationB{Value: randomBool()},
+	}
+}
+
+func RandomMockConfigurationWithA() MockConfigurationWithA {
+	return MockConfigurationWithA{
+		A: MockConfigurationA{
+			Value: randomString(),
+		},
+	}
+}
+
+func RandomMockConfigurationWithPointer() MockConfigurationWithPointer {
+	a1 := RandomMockConfigurationWithA()
+	a2 := RandomMockConfigurationWithA()
+	return MockConfigurationWithPointer{
+		PtrWithA:  &a1,
+		PtrWithA2: &a2,
 	}
 }
 

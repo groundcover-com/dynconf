@@ -14,8 +14,7 @@ func TestRegistererWithManager(t *testing.T) {
 	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels]("testTwoDepthLevels")
 	mockConfiguration := testutils.RandomMockConfigurationWithTwoDepthLevels()
 
-	err := mgr.OnConfigurationUpdate(mockConfiguration)
-	if err != nil {
+	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
 		t.Fatalf("failed to initiate configuration that has two depth levels: %v", err)
 	}
 

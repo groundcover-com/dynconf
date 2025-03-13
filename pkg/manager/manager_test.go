@@ -412,3 +412,92 @@ func TestChangeConfigurationOnlyTriggersAlteredCallbacks(t *testing.T) {
 		t.Fatalf("callback B called wrong number of times %d", timesB)
 	}
 }
+
+func TestConfigurationWithTwoDepthLevels(t *testing.T) {
+	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels]("testTwoDepthLevels")
+	mockConfiguration := testutils.RandomMockConfigurationWithTwoDepthLevels()
+
+	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
+		t.Fatalf("failed to initiate configuration that has two depth levels: %v", err)
+	}
+
+	copyConfiguration := testutils.MockConfigurationWithTwoDepthLevels{}
+	callbackSecond := func(cfg testutils.MockConfigurationWithOneDepthLevel) error {
+		copyConfiguration.Second = cfg
+		return nil
+	}
+	callbackFirstA := func(cfg testutils.MockConfigurationA) error {
+		copyConfiguration.First.A = cfg
+		return nil
+	}
+	callbackFirstB := func(cfg testutils.MockConfigurationB) error {
+		copyConfiguration.First.B = cfg
+		return nil
+	}
+
+	if err := mgr.Register([]string{"First", "B"}, callbackFirstA); err == nil ||
+		!errors.Is(err, manager.ErrBadCallback) {
+		t.Fatalf("wrong error when registering bad callback: %v", err)
+	}
+
+	if err := mgr.Register([]string{"Second"}, callbackSecond); err != nil {
+		t.Fatalf("failed to register callback on Second configuration: %v", err)
+	}
+	if err := mgr.Register([]string{"First", "A"}, callbackFirstA); err != nil {
+		t.Fatalf("failed to register callback on FirstA configuration: %v", err)
+	}
+	if err := mgr.Register([]string{"First", "B"}, callbackFirstB); err != nil {
+		t.Fatalf("failed to register callback on FirstB configuration: %v", err)
+	}
+
+	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
+		t.Fatalf("failed to update configuration: %#v", err)
+	}
+
+	if !reflect.DeepEqual(copyConfiguration, mockConfiguration) {
+		t.Fatalf(
+			"after updating configuration, expected %#v but got %#v",
+			mockConfiguration,
+			copyConfiguration,
+		)
+	}
+}
+
+func TestConfigurationWithPointers(t *testing.T) {
+	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithPointer]("testPointers")
+	mockConfiguration := testutils.RandomMockConfigurationWithPointer()
+
+	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
+		t.Fatalf("failed to initiate configuration that has two depth levels: %v", err)
+	}
+
+	copyConfiguration := testutils.RandomMockConfigurationWithPointer()
+	callbackOnPointer := func(cfg testutils.MockConfigurationWithA) error {
+		copyConfiguration.PtrWithA = &cfg
+		return nil
+	}
+	callbackWithPointerOnThePath := func(cfg testutils.MockConfigurationA) error {
+		copyConfiguration.PtrWithA2.A = cfg
+		return nil
+	}
+
+	if err := mgr.Register([]string{"PtrWithA"}, callbackOnPointer); err != nil {
+		t.Fatalf("failed to register callback on pointer configuration: %v", err)
+	}
+
+	if err := mgr.Register([]string{"PtrWithA2", "A"}, callbackWithPointerOnThePath); err != nil {
+		t.Fatalf("failed to register callback on configuration that has pointer on the path: %v", err)
+	}
+
+	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
+		t.Fatalf("failed to update configuration: %#v", err)
+	}
+
+	if !reflect.DeepEqual(copyConfiguration, mockConfiguration) {
+		t.Fatalf(
+			"after updating configuration, expected %#v but got %#v",
+			mockConfiguration,
+			copyConfiguration,
+		)
+	}
+}
