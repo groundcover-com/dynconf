@@ -11,7 +11,13 @@ import (
 )
 
 func TestRegistererWithManager(t *testing.T) {
-	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels]("testTwoDepthLevels")
+	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels](
+		"testTwoDepthLevels",
+	)
+	if err != nil {
+		t.Fatalf("failed to initiate configuration manager: %v", err)
+	}
+
 	mockConfiguration := testutils.RandomMockConfigurationWithTwoDepthLevels()
 
 	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
@@ -68,13 +74,15 @@ func TestRegistererWithManager(t *testing.T) {
 }
 
 func TestRegistererOnTopLevel(t *testing.T) {
-	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels](
+	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels](
 		"testRegisterOnTopLevel",
 	)
+	if err != nil {
+		t.Fatalf("failed to initiate configuration manager: %v", err)
+	}
 	mockConfiguration := testutils.RandomMockConfigurationWithTwoDepthLevels()
 
-	err := mgr.OnConfigurationUpdate(mockConfiguration)
-	if err != nil {
+	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
 		t.Fatalf("failed to initiate configuration that has two depth levels: %v", err)
 	}
 

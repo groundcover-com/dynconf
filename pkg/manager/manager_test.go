@@ -2,6 +2,7 @@ package manager_test
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -14,8 +15,13 @@ func newInitiatedConfigurationManagerWithOneDepthLevel(id string) (
 	testutils.MockConfigurationWithOneDepthLevel,
 	error,
 ) {
-	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithOneDepthLevel](id)
 	mockConfiguration := testutils.RandomMockConfigurationWithOneDepthLevel()
+
+	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithOneDepthLevel](id)
+	if err != nil {
+		return nil, mockConfiguration, fmt.Errorf("failed to initiate configuration manager: %w", err)
+	}
+
 	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
 		return nil, mockConfiguration, err
 	}
@@ -24,11 +30,13 @@ func newInitiatedConfigurationManagerWithOneDepthLevel(id string) (
 }
 
 func TestConfigurationWithDuplicates(t *testing.T) {
-	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithDuplicates]("testDuplicates")
+	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithDuplicates]("testDuplicates")
+	if err != nil {
+		t.Fatalf("failed to initiate configuration manager: %v", err)
+	}
 	mockConfiguration := testutils.RandomMockConfigurationWithDuplicates()
 
-	err := mgr.OnConfigurationUpdate(mockConfiguration)
-	if err != nil {
+	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
 		t.Fatalf("failed to initiate configuration that has duplicates: %v", err)
 	}
 
@@ -74,11 +82,13 @@ func TestConfigurationWithDuplicates(t *testing.T) {
 }
 
 func TestConfigurationWithTypedef(t *testing.T) {
-	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTypedef]("testTypedef")
+	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTypedef]("testTypedef")
+	if err != nil {
+		t.Fatalf("failed to initiate configuration manager: %v", err)
+	}
 	mockConfiguration := testutils.RandomMockConfigurationWithTypedef()
 
-	err := mgr.OnConfigurationUpdate(mockConfiguration)
-	if err != nil {
+	if err = mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
 		t.Fatalf("failed to initiate configuration that has typedef: %v", err)
 	}
 
@@ -414,7 +424,12 @@ func TestChangeConfigurationOnlyTriggersAlteredCallbacks(t *testing.T) {
 }
 
 func TestConfigurationWithTwoDepthLevels(t *testing.T) {
-	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels]("testTwoDepthLevels")
+	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels](
+		"testTwoDepthLevels",
+	)
+	if err != nil {
+		t.Fatalf("failed to initiate configuration manager: %v", err)
+	}
 	mockConfiguration := testutils.RandomMockConfigurationWithTwoDepthLevels()
 
 	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
@@ -464,7 +479,10 @@ func TestConfigurationWithTwoDepthLevels(t *testing.T) {
 }
 
 func TestConfigurationWithPointers(t *testing.T) {
-	mgr := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithPointer]("testPointers")
+	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithPointer]("testPointers")
+	if err != nil {
+		t.Fatalf("failed to initiate configuration manager: %v", err)
+	}
 	mockConfiguration := testutils.RandomMockConfigurationWithPointer()
 
 	if err := mgr.OnConfigurationUpdate(mockConfiguration); err != nil {
