@@ -21,26 +21,19 @@ const (
 )
 
 var (
-	// Registering to listen on updates to a type that doesn't exist within the configuration will return this error.
-	ErrNoMatchingTypeFound = errors.New("no matching type found")
+	// Registering to listen on updates to a path that doesn't exist within the configuration will return this error.
+	ErrNoMatchingFieldFound = errors.New("no matching field found")
 
 	// The configuration manager allows only specific types of configurations to be used. This error indicates that a
 	// wrong configuration type is used, and it can only be returned on the first configuration update.
 	ErrWrongConfigurationType = errors.New("wrong configuration type")
 
-	// If the configuration has more than one instance of a struct type inside it, and a user listens on updates to this
-	// type, the behaviour is undefined as to which instance they listen to. Therefore, we disallow dynamic
-	// configuration with two instances of the same type.
-	//
-	// Working around that is easy - simply define a new type for the same struct.
-	// If needed, the user can cast between the different types when their callback is triggered.
-	ErrConfigurationHasDuplicates = errors.New("configuration has duplicates")
-
 	// When registering, the callback is very unspecific. However, in fact it has to have a very specific definition.
 	// If a wrong callback is given, this error is returned.
 	ErrBadCallback = errors.New("bad callback")
 
-	errInvalidTypeToIterate = errors.New("invalid type to iterate")
+	// When registering, a valid path must be provided.
+	ErrInvalidPath = errors.New("invalid path")
 )
 
 type DynamicConfigurationManagerMetrics struct {
@@ -48,7 +41,6 @@ type DynamicConfigurationManagerMetrics struct {
 	newPathConfigurationDoesNotExist   *metrics_types.LazyCounter
 	oldPathConfigurationDoesNotExist   *metrics_types.LazyCounter
 	moduleDoesNotAllowNewConfiguration *metrics_types.LazyCounter
-	invalidNewConfigurationType        *metrics_types.LazyCounter
 }
 
 func NewDynamicConfigurationManagerMetrics(id string) *DynamicConfigurationManagerMetrics {
@@ -69,17 +61,12 @@ func NewDynamicConfigurationManagerMetrics(id string) *DynamicConfigurationManag
 			errorMetricName,
 			map[string]string{errorMetricKey: "module_does_not_allow_new_configuration", idMetricKey: id},
 		),
-		invalidNewConfigurationType: metrics_factory.CreateErrorCounter(
-			errorMetricName,
-			map[string]string{errorMetricKey: "invalid_new_configuration_type", idMetricKey: id},
-		),
 	}
 }
 
 type DynamicConfigurationManager[Configuration any] struct {
-	id        string
-	cfg       Configuration
-	initiated bool
+	id  string
+	cfg Configuration
 
 	registrationLock sync.Mutex
 	registered       map[string][]registeredConfigurable
@@ -87,40 +74,35 @@ type DynamicConfigurationManager[Configuration any] struct {
 	metrics *DynamicConfigurationManagerMetrics
 }
 
-func NewDynamicConfigurationManager[Configuration any](id string) *DynamicConfigurationManager[Configuration] {
+func NewDynamicConfigurationManager[Configuration any](id string) (*DynamicConfigurationManager[Configuration], error) {
+	if err := validateConfigurationType[Configuration](); err != nil {
+		return nil, err
+	}
+
 	return &DynamicConfigurationManager[Configuration]{
 		registered: make(map[string][]registeredConfigurable),
 		id:         id,
 		metrics:    NewDynamicConfigurationManagerMetrics(id),
-	}
+	}, nil
 }
 
-// Update the configuration manager that the configuration has been updated.
+// Pass updated configuration to the configuration manager.
+// Before calling that, the configuration is the zero configuration, so it's good practice to call this for the first
+// time right after initiating the manager.
 func (mgr *DynamicConfigurationManager[Configuration]) OnConfigurationUpdate(
 	newConfiguration Configuration,
 ) (finalError error) {
 	mgr.registrationLock.Lock()
 	defer mgr.registrationLock.Unlock()
 
-	if !mgr.initiated {
-		if err := mgr.validateConfigurationType(newConfiguration); err != nil {
-			mgr.metrics.invalidNewConfigurationType.Inc()
-			return err
-		}
-		if err := mgr.validateConfigurationDoesNotHaveDuplicateTypes(newConfiguration); err != nil {
-			return err
-		}
-	}
-
 	configurationsToRestore := make([]any, 0)
 	modulesToRestore := make([]registeredConfigurable, 0)
 	defer func() {
 		if finalError == nil {
-			mgr.initiated = true
 			return
 		}
 
-		for i := 0; i < len(modulesToRestore); i++ {
+		for i := range modulesToRestore {
 			if err := modulesToRestore[i].call(configurationsToRestore[i]); err != nil {
 				mgr.metrics.failedToRestore.Inc()
 			}
@@ -165,8 +147,7 @@ func (mgr *DynamicConfigurationManager[Configuration]) OnConfigurationUpdate(
 
 // Register a callback to be called upon dynamic configuration change.
 //
-// The first argument is an instance of the configuration struct that the callback will receive. It shouldn't be a
-// pointer to the instance, but the instance itself.
+// The first argument is the path to the struct requested within the configuration struct.
 //
 // The second argument is the callback. It must be a function that receives a single argument, which is of the correct
 // type of the configuration, and returns a single return value, an error.
@@ -178,12 +159,10 @@ func (mgr *DynamicConfigurationManager[Configuration]) OnConfigurationUpdate(
 //
 // Upon successful registration, the callback is instantly called, from the calling thread and before this function
 // returns, with the most up-to-date configuration available.
-func (mgr *DynamicConfigurationManager[Configuration]) Register(cfg any, callback any) error {
-	expectedType := reflect.TypeOf(cfg)
-
-	path, err := mgr.findPathToType(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to find path: %w", err)
+// If no configuration was passed to the manager yet, the most up-to-date configuration is the zero configuration.
+func (mgr *DynamicConfigurationManager[Configuration]) Register(path []string, callback any) error {
+	if err := validatePath(path); err != nil {
+		return err
 	}
 	pathString := pathToString(path)
 
@@ -194,8 +173,9 @@ func (mgr *DynamicConfigurationManager[Configuration]) Register(cfg any, callbac
 	// will always get the updates.
 	pathConfiguration, err := mgr.getStructByPath(mgr.cfg, path)
 	if err != nil {
-		return fmt.Errorf("failed to perform initial query of path %s: %w", path, err)
+		return fmt.Errorf("failed to perform initial query of path %s: %w", pathString, err)
 	}
+	expectedType := reflect.TypeOf(pathConfiguration)
 
 	if _, exists := mgr.registered[pathString]; !exists {
 		mgr.registered[pathString] = make([]registeredConfigurable, 0)
@@ -213,7 +193,7 @@ func (mgr *DynamicConfigurationManager[Configuration]) Register(cfg any, callbac
 		)
 	}
 
-	if callbackType.In(0) != expectedType {
+	if callbackType.In(0) != reflect.TypeOf(pathConfiguration) {
 		return fmt.Errorf("%w: can't register type whose callback argument is the wrong type", ErrBadCallback)
 	}
 
@@ -238,80 +218,6 @@ func (mgr *DynamicConfigurationManager[Configuration]) Register(cfg any, callbac
 	return registeredConfigurable.call(pathConfiguration)
 }
 
-// Finds the path to a struct inside the configuration that matches the type of the target.
-// It returns a slice of field names needed to reach the struct, or an error if no match is found.
-func (mgr *DynamicConfigurationManager[Configuration]) findPathToType(target any) ([]string, error) {
-	srcVal := reflect.ValueOf(mgr.cfg)
-	targetType := reflect.TypeOf(target)
-
-	if targetType.Kind() == reflect.Ptr {
-		targetType = targetType.Elem()
-	}
-
-	var foundPath []string
-	callback := func(v reflect.Value, path []string) bool {
-		if v.Type() != targetType {
-			return false
-		}
-		foundPath = make([]string, len(path))
-		copy(foundPath, path)
-		return true
-	}
-
-	done, err := mgr.iterateStructsInConfiguration(srcVal, []string{}, callback)
-	if err != nil {
-		return nil, err
-	}
-	if !done {
-		return nil, ErrNoMatchingTypeFound
-	}
-	return foundPath, nil
-}
-
-func (mgr *DynamicConfigurationManager[Configuration]) iterateStructsInConfiguration(
-	v reflect.Value,
-	path []string,
-	callback func(v reflect.Value, path []string) bool,
-) (bool, error) {
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return false, errInvalidTypeToIterate
-		}
-		v = v.Elem()
-	}
-
-	if v.Kind() != reflect.Struct {
-		return false, errInvalidTypeToIterate
-	}
-
-	if callback(v, path) {
-		return true, nil
-	}
-
-	for i := 0; i < v.NumField(); i++ {
-		field := v.Type().Field(i)
-		fieldVal := v.Field(i)
-
-		innerPath := make([]string, len(path))
-		copy(innerPath, path)
-		innerPath = append(innerPath, field.Name)
-
-		isDone, err := mgr.iterateStructsInConfiguration(fieldVal, innerPath, callback)
-		if err != nil {
-			if errors.Is(err, errInvalidTypeToIterate) {
-				continue
-			}
-			return false, fmt.Errorf("error iterating path %s: %w", pathToString(innerPath), err)
-		}
-
-		if isDone {
-			return isDone, nil
-		}
-	}
-
-	return false, nil
-}
-
 // Traverses the configuration using the given path of field names and returns the found struct.
 func (mgr *DynamicConfigurationManager[Configuration]) getStructByPath(cfg any, path []string) (any, error) {
 	srcVal := reflect.ValueOf(cfg)
@@ -319,9 +225,36 @@ func (mgr *DynamicConfigurationManager[Configuration]) getStructByPath(cfg any, 
 	for _, field := range path {
 		if srcVal.Kind() == reflect.Ptr {
 			if srcVal.IsNil() {
-				return nil, fmt.Errorf("field %s of path %s is nil", field, pathToString(path))
+				return nil, fmt.Errorf(
+					"field %s of path %s is nil: %w",
+					field,
+					pathToString(path),
+					ErrNoMatchingFieldFound,
+				)
 			}
 			srcVal = srcVal.Elem()
+		}
+
+		if srcVal.Kind() != reflect.Struct {
+			return nil, fmt.Errorf(
+				"can't access field %s of non-struct type %s in path %s: %w",
+				field,
+				srcVal.Kind(),
+				pathToString(path),
+				ErrNoMatchingFieldFound,
+			)
+		}
+
+		structType := srcVal.Type()
+		_, found := structType.FieldByName(field)
+		if !found {
+			return nil, fmt.Errorf(
+				"field %s does not exist in struct type %s with path %s: %w",
+				field,
+				structType,
+				pathToString(path),
+				ErrNoMatchingFieldFound,
+			)
 		}
 
 		srcVal = srcVal.FieldByName(field)
@@ -329,7 +262,12 @@ func (mgr *DynamicConfigurationManager[Configuration]) getStructByPath(cfg any, 
 		if srcVal.Kind() == reflect.Ptr {
 			srcVal = srcVal.Elem()
 			if !srcVal.IsValid() {
-				return nil, fmt.Errorf("nil pointer encountered at field %s of path %s", field, pathToString(path))
+				return nil, fmt.Errorf(
+					"nil pointer encountered at field %s of path %s: %w",
+					field,
+					pathToString(path),
+					ErrNoMatchingFieldFound,
+				)
 			}
 		}
 	}
@@ -337,8 +275,9 @@ func (mgr *DynamicConfigurationManager[Configuration]) getStructByPath(cfg any, 
 	return srcVal.Interface(), nil
 }
 
-func (mgr *DynamicConfigurationManager[Configuration]) validateConfigurationType(newConfiguration Configuration) error {
-	newVal := reflect.ValueOf(newConfiguration)
+func validateConfigurationType[Configuration any]() error {
+	var zeroConfig Configuration
+	newVal := reflect.ValueOf(zeroConfig)
 
 	if newVal.Kind() != reflect.Struct {
 		return fmt.Errorf("%w: configuration must be a struct", ErrWrongConfigurationType)
@@ -347,36 +286,13 @@ func (mgr *DynamicConfigurationManager[Configuration]) validateConfigurationType
 	return nil
 }
 
-func (mgr *DynamicConfigurationManager[Configuration]) validateConfigurationDoesNotHaveDuplicateTypes(
-	cfg Configuration,
-) error {
-	srcVal := reflect.ValueOf(cfg)
-
-	foundTypes := make(map[string]string)
-	foundDuplicatePath := ""
-
-	callback := func(v reflect.Value, path []string) bool {
-		pathStr := pathToString(path)
-		t := v.Type()
-		typeStr := t.String()
-		if t.PkgPath() != "" {
-			typeStr = t.PkgPath() + "." + typeStr
+func validatePath(path []string) error {
+	for _, p := range path {
+		if strings.Contains(p, pathSeparator) {
+			return ErrInvalidPath
 		}
-		if _, exists := foundTypes[typeStr]; exists {
-			foundDuplicatePath = pathStr
-			return true
-		}
-		foundTypes[typeStr] = pathStr
-		return false
 	}
 
-	done, err := mgr.iterateStructsInConfiguration(srcVal, []string{}, callback)
-	if err != nil {
-		return fmt.Errorf("failed to iterate configuration: %w", err)
-	}
-	if done {
-		return fmt.Errorf("%w: %s", ErrConfigurationHasDuplicates, foundDuplicatePath)
-	}
 	return nil
 }
 
@@ -385,5 +301,9 @@ func pathToString(path []string) string {
 }
 
 func stringToPath(str string) []string {
+	if str == "" {
+		return make([]string, 0)
+	}
+
 	return strings.Split(str, pathSeparator)
 }

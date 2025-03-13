@@ -1,4 +1,4 @@
-# Dynamic Configuration Updater
+# Dynamic Configuration Listener
 
 The `Dynamic Configuration Updater` listens on updates to a configuration file, merges them onto a base configuration, and notifies that the configuration has been updated.
 
