@@ -472,6 +472,10 @@ func TestConfigurationWithPointers(t *testing.T) {
 	}
 
 	copyConfiguration := testutils.RandomMockConfigurationWithPointer()
+	badCallback := func(cfg *testutils.MockConfigurationWithA) error {
+		copyConfiguration.PtrWithA = cfg
+		return nil
+	}
 	callbackOnPointer := func(cfg testutils.MockConfigurationWithA) error {
 		copyConfiguration.PtrWithA = &cfg
 		return nil
@@ -479,6 +483,10 @@ func TestConfigurationWithPointers(t *testing.T) {
 	callbackWithPointerOnThePath := func(cfg testutils.MockConfigurationA) error {
 		copyConfiguration.PtrWithA2.A = cfg
 		return nil
+	}
+
+	if err := mgr.Register([]string{"PtrWithA"}, badCallback); err == nil || !errors.Is(err, manager.ErrBadCallback) {
+		t.Fatalf("wrong error when registering bad callback: %v", err)
 	}
 
 	if err := mgr.Register([]string{"PtrWithA"}, callbackOnPointer); err != nil {
