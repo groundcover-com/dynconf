@@ -1,5 +1,7 @@
 package registerer
 
+import "slices"
+
 type DynamicConfigurationRegisterable interface {
 	Register(path []string, callback any) error
 }
@@ -10,9 +12,16 @@ type DynamicConfigurationRegisterer struct {
 }
 
 func NewDynamicConfigurationRegisterer(registerable DynamicConfigurationRegisterable) *DynamicConfigurationRegisterer {
+	return NewDynamicConfigurationRegistererWithPrefix(registerable, make([]string, 0))
+}
+
+func NewDynamicConfigurationRegistererWithPrefix(
+	registerable DynamicConfigurationRegisterable,
+	prefix []string,
+) *DynamicConfigurationRegisterer {
 	return &DynamicConfigurationRegisterer{
 		registerable: registerable,
-		prefix:       make([]string, 0),
+		prefix:       slices.Clone(prefix),
 	}
 }
 
@@ -21,14 +30,8 @@ func (registerer *DynamicConfigurationRegisterer) Register(callback any) error {
 }
 
 func (registerer *DynamicConfigurationRegisterer) Under(under string) *DynamicConfigurationRegisterer {
-	p := make([]string, 0, len(registerer.prefix)+1)
-	for _, v := range registerer.prefix {
-		p = append(p, v)
-	}
-	p = append(p, under)
-
 	return &DynamicConfigurationRegisterer{
 		registerable: registerer.registerable,
-		prefix:       p,
+		prefix:       append(slices.Clone(registerer.prefix), under),
 	}
 }
