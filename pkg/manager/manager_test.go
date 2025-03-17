@@ -183,6 +183,61 @@ func TestChangeConfigurationAfterInitiatingButBeforeRegistering(t *testing.T) {
 	}
 }
 
+func TestGetThatReceivesWrongArgumentType(t *testing.T) {
+	mgr, _, err := newInitiatedConfigurationManagerWithOneDepthLevel("testGetWrongArg")
+	if err != nil {
+		t.Fatalf("failed to initiate configuration: %#v", err)
+	}
+
+	var cfg testutils.MockConfigurationA
+	err = mgr.Get([]string{"B"}, &cfg)
+	if err == nil {
+		t.Fatalf("Success error when getting with wrong argument type")
+	}
+
+	if !errors.Is(err, manager.ErrBadType) {
+		t.Fatalf("Wrong error when getting with wrong argument type: %#v", err)
+	}
+}
+
+func TestGetThatReceivesNonPointer(t *testing.T) {
+	mgr, _, err := newInitiatedConfigurationManagerWithOneDepthLevel("testGetArgNotPointer")
+	if err != nil {
+		t.Fatalf("failed to initiate configuration: %#v", err)
+	}
+
+	var cfg testutils.MockConfigurationB
+	err = mgr.Get([]string{"B"}, cfg)
+	if err == nil {
+		t.Fatalf("Success when getting with non-pointer argument")
+	}
+
+	if !errors.Is(err, manager.ErrBadType) {
+		t.Fatalf("Wrong error when getting with non-pointer argument: %#v", err)
+	}
+}
+
+func TestSimpleGet(t *testing.T) {
+	mgr, mockConfiguration, err := newInitiatedConfigurationManagerWithOneDepthLevel("testSimpleGet")
+	if err != nil {
+		t.Fatalf("failed to initiate configuration: %#v", err)
+	}
+
+	var copyCfg testutils.MockConfigurationB
+	err = mgr.Get([]string{"B"}, &copyCfg)
+	if err != nil {
+		t.Fatalf("Failed to get current configuration B")
+	}
+
+	if !reflect.DeepEqual(mockConfiguration.B, copyCfg) {
+		t.Fatalf(
+			"after getting mock configuration, expected %#v but got %#v",
+			mockConfiguration.B,
+			copyCfg,
+		)
+	}
+}
+
 func TestRegisterCallbackThatReceivesWrongArgumentType(t *testing.T) {
 	mgr, _, err := newInitiatedConfigurationManagerWithOneDepthLevel("testCallbackWrongArg")
 	if err != nil {

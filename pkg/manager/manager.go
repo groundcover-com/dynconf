@@ -32,6 +32,10 @@ var (
 	// If a wrong callback is given, this error is returned.
 	ErrBadCallback = errors.New("bad callback")
 
+	// When getting configuration, the out parameter is very unspecific. However, in fact it has to have a specific
+	// type. If a wrong type is given, this error is returned.
+	ErrBadType = errors.New("bad type")
+
 	// When registering, a valid path must be provided.
 	ErrInvalidPath = errors.New("invalid path")
 )
@@ -68,7 +72,7 @@ type DynamicConfigurationManager[Configuration any] struct {
 	id  string
 	cfg Configuration
 
-	registrationLock sync.Mutex
+	configUpdateLock sync.Mutex
 	registered       map[string][]registeredConfigurable
 
 	metrics *DynamicConfigurationManagerMetrics
@@ -92,8 +96,8 @@ func NewDynamicConfigurationManager[Configuration any](id string) (*DynamicConfi
 func (mgr *DynamicConfigurationManager[Configuration]) OnConfigurationUpdate(
 	newConfiguration Configuration,
 ) (finalError error) {
-	mgr.registrationLock.Lock()
-	defer mgr.registrationLock.Unlock()
+	mgr.configUpdateLock.Lock()
+	defer mgr.configUpdateLock.Unlock()
 
 	configurationsToRestore := make([]any, 0)
 	modulesToRestore := make([]registeredConfigurable, 0)
@@ -145,6 +149,47 @@ func (mgr *DynamicConfigurationManager[Configuration]) OnConfigurationUpdate(
 	return nil
 }
 
+// Get the current value of a part of the configuration.
+// To get the current value and also be notified on updates, register instead.
+//
+// The second argument is an out parameter, where the current configuration will be set.
+// The configuration under this path is a struct, and this has to be a pointer a struct of the same type.
+func (mgr *DynamicConfigurationManager[Configuration]) Get(path []string, out any) error {
+	if out == nil {
+		return fmt.Errorf("%w: out parameter can not be nil", ErrBadType)
+	}
+
+	outValue := reflect.ValueOf(out)
+	if outValue.Kind() != reflect.Pointer {
+		return fmt.Errorf("%w: out parameter must be a pointer", ErrBadType)
+	}
+
+	outValue = outValue.Elem()
+	if !outValue.CanSet() { // shouldn't return false, because the out parameter is obviously addressable.
+		return fmt.Errorf("%w: out parameter can not be set", ErrBadType)
+	}
+
+	if err := validatePath(path); err != nil {
+		return err
+	}
+	pathString := pathToString(path)
+
+	mgr.configUpdateLock.Lock()
+	defer mgr.configUpdateLock.Unlock()
+
+	pathConfiguration, err := mgr.getStructByPath(mgr.cfg, path)
+	if err != nil {
+		return fmt.Errorf("failed to perform query of path %s: %w", pathString, err)
+	}
+
+	if !reflect.TypeOf(pathConfiguration).AssignableTo(outValue.Type()) {
+		return fmt.Errorf("%w: can't get configuration into out parameter of the wrong type", ErrBadType)
+	}
+
+	outValue.Set(reflect.ValueOf(pathConfiguration))
+	return nil
+}
+
 // Register a callback to be called upon dynamic configuration change.
 //
 // The first argument is the path to the struct requested within the configuration struct.
@@ -166,8 +211,8 @@ func (mgr *DynamicConfigurationManager[Configuration]) Register(path []string, c
 	}
 	pathString := pathToString(path)
 
-	mgr.registrationLock.Lock()
-	defer mgr.registrationLock.Unlock()
+	mgr.configUpdateLock.Lock()
+	defer mgr.configUpdateLock.Unlock()
 
 	// Get the most up-to-date configuration after acquiring the lock, so that if further changes follow, the registerer
 	// will always get the updates.
@@ -193,7 +238,7 @@ func (mgr *DynamicConfigurationManager[Configuration]) Register(path []string, c
 		)
 	}
 
-	if callbackType.In(0) != reflect.TypeOf(pathConfiguration) {
+	if !reflect.TypeOf(pathConfiguration).AssignableTo(callbackType.In(0)) {
 		return fmt.Errorf("%w: can't register type whose callback argument is the wrong type", ErrBadCallback)
 	}
 
