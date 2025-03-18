@@ -192,11 +192,11 @@ func TestGetThatReceivesWrongArgumentType(t *testing.T) {
 	var cfg testutils.MockConfigurationA
 	err = mgr.Get([]string{"B"}, &cfg)
 	if err == nil {
-		t.Fatalf("Success error when getting with wrong argument type")
+		t.Fatalf("success error when getting with wrong argument type")
 	}
 
 	if !errors.Is(err, manager.ErrBadType) {
-		t.Fatalf("Wrong error when getting with wrong argument type: %#v", err)
+		t.Fatalf("wrong error when getting with wrong argument type: %#v", err)
 	}
 }
 
@@ -209,11 +209,11 @@ func TestGetThatReceivesNonPointer(t *testing.T) {
 	var cfg testutils.MockConfigurationB
 	err = mgr.Get([]string{"B"}, cfg)
 	if err == nil {
-		t.Fatalf("Success when getting with non-pointer argument")
+		t.Fatalf("success when getting with non-pointer argument")
 	}
 
 	if !errors.Is(err, manager.ErrBadType) {
-		t.Fatalf("Wrong error when getting with non-pointer argument: %#v", err)
+		t.Fatalf("wrong error when getting with non-pointer argument: %#v", err)
 	}
 }
 
@@ -226,7 +226,7 @@ func TestSimpleGet(t *testing.T) {
 	var copyCfg testutils.MockConfigurationB
 	err = mgr.Get([]string{"B"}, &copyCfg)
 	if err != nil {
-		t.Fatalf("Failed to get current configuration B")
+		t.Fatalf("failed to get current configuration B")
 	}
 
 	if !reflect.DeepEqual(mockConfiguration.B, copyCfg) {

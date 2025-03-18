@@ -182,8 +182,15 @@ func (mgr *DynamicConfigurationManager[Configuration]) Get(path []string, out an
 		return fmt.Errorf("failed to perform query of path %s: %w", pathString, err)
 	}
 
-	if !reflect.TypeOf(pathConfiguration).AssignableTo(outValue.Type()) {
-		return fmt.Errorf("%w: can't get configuration into out parameter of the wrong type", ErrBadType)
+	outValueType := outValue.Type()
+	confType := reflect.TypeOf(pathConfiguration)
+	if !confType.AssignableTo(outValueType) {
+		return fmt.Errorf(
+			"%w: can't get configuration into out parameter of the wrong type %s (expected %s)",
+			ErrBadType,
+			outValue.String(),
+			confType.String(),
+		)
 	}
 
 	outValue.Set(reflect.ValueOf(pathConfiguration))
@@ -226,28 +233,8 @@ func (mgr *DynamicConfigurationManager[Configuration]) Register(path []string, c
 		mgr.registered[pathString] = make([]registeredConfigurable, 0)
 	}
 
-	callbackType := reflect.TypeOf(callback)
-	if callbackType.Kind() != reflect.Func {
-		return fmt.Errorf("%w: can't register non-function", ErrBadCallback)
-	}
-
-	if callbackType.NumIn() != 1 {
-		return fmt.Errorf(
-			"%w: can't register type whose callback does not receive exactly one argument",
-			ErrBadCallback,
-		)
-	}
-
-	if !reflect.TypeOf(pathConfiguration).AssignableTo(callbackType.In(0)) {
-		return fmt.Errorf("%w: can't register type whose callback argument is the wrong type", ErrBadCallback)
-	}
-
-	if callbackType.NumOut() != 1 {
-		return fmt.Errorf("%w: can't register type whose callback does not return exactly one argument", ErrBadCallback)
-	}
-
-	if callbackType.Out(0) != reflect.TypeOf((*error)(nil)).Elem() {
-		return fmt.Errorf("%w: can't register type whose callback does not return an error", ErrBadCallback)
+	if err := mgr.validateCallback(callback, reflect.TypeOf(pathConfiguration)); err != nil {
+		return fmt.Errorf("invalid callback of path %s: %w", pathString, err)
 	}
 
 	callbackMethod := reflect.ValueOf(callback)
@@ -318,6 +305,43 @@ func (mgr *DynamicConfigurationManager[Configuration]) getStructByPath(cfg any, 
 	}
 
 	return srcVal.Interface(), nil
+}
+
+func (mgr *DynamicConfigurationManager[Configuration]) validateCallback(
+	callback any,
+	expectedArgType reflect.Type,
+) error {
+	callbackType := reflect.TypeOf(callback)
+	if callbackType.Kind() != reflect.Func {
+		return fmt.Errorf("%w: can't register non-function", ErrBadCallback)
+	}
+
+	if callbackType.NumIn() != 1 {
+		return fmt.Errorf(
+			"%w: can't register type whose callback does not receive exactly one argument",
+			ErrBadCallback,
+		)
+	}
+
+	argType := callbackType.In(0)
+	if !expectedArgType.AssignableTo(argType) {
+		return fmt.Errorf(
+			"%w: can't register type whose callback argument is the wrong type %s (expected %s)",
+			ErrBadCallback,
+			argType.String(),
+			expectedArgType.String(),
+		)
+	}
+
+	if callbackType.NumOut() != 1 {
+		return fmt.Errorf("%w: can't register type whose callback does not return exactly one argument", ErrBadCallback)
+	}
+
+	if callbackType.Out(0) != reflect.TypeOf((*error)(nil)).Elem() {
+		return fmt.Errorf("%w: can't register type whose callback does not return an error", ErrBadCallback)
+	}
+
+	return nil
 }
 
 func validateConfigurationType[Configuration any]() error {
