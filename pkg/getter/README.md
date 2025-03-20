@@ -17,7 +17,7 @@ topLevelGetter := registerer.NewDynamicConfigurationGetter(mgr)
 Now you can traverse the configuration tree, one field at a time:
 
 ```go
-nextLevelGetter := topLevelGetter.Under("fieldName")
+nextLevelGetter := topLevelGetter.Select("fieldName")
 ```
 
 When you've reached the destination field, you can register a callback to be triggered whenever this field changes:

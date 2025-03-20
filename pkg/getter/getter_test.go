@@ -26,10 +26,10 @@ func TestGetterWithManager(t *testing.T) {
 
 	topLevelGetter := getter.NewDynamicConfigurationGetter(mgr)
 
-	firstGetter := topLevelGetter.Under("First")
-	secondGetter := topLevelGetter.Under("Second")
-	firstAGetter := firstGetter.Under("A")
-	firstBGetter := firstGetter.Under("B")
+	firstGetter := topLevelGetter.Select("First")
+	secondGetter := topLevelGetter.Select("Second")
+	firstAGetter := firstGetter.Select("A")
+	firstBGetter := firstGetter.Select("B")
 
 	copyConfiguration := testutils.MockConfigurationWithTwoDepthLevels{}
 	callbackSecond := func(cfg testutils.MockConfigurationWithOneDepthLevel) error {

@@ -34,9 +34,9 @@ func (getter *DynamicConfigurationGetter) Get(out any) error {
 	return getter.gettable.Get(getter.prefix, out)
 }
 
-func (getter *DynamicConfigurationGetter) Under(under string) *DynamicConfigurationGetter {
+func (getter *DynamicConfigurationGetter) Select(selection string) *DynamicConfigurationGetter {
 	return &DynamicConfigurationGetter{
 		gettable: getter.gettable,
-		prefix:   append(slices.Clone(getter.prefix), under),
+		prefix:   append(slices.Clone(getter.prefix), selection),
 	}
 }
