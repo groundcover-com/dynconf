@@ -1,4 +1,4 @@
-package registerer_test
+package getter_test
 
 import (
 	"errors"
@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/groundcover-com/dynconf/internal/testutils"
+	"github.com/groundcover-com/dynconf/pkg/getter"
 	"github.com/groundcover-com/dynconf/pkg/manager"
-	"github.com/groundcover-com/dynconf/pkg/registerer"
 )
 
-func TestRegistererWithManager(t *testing.T) {
+func TestGetterWithManager(t *testing.T) {
 	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels](
 		"testTwoDepthLevels",
 	)
@@ -24,12 +24,12 @@ func TestRegistererWithManager(t *testing.T) {
 		t.Fatalf("failed to initiate configuration that has two depth levels: %v", err)
 	}
 
-	topLevelRegisterer := registerer.NewDynamicConfigurationRegisterer(mgr)
+	topLevelGetter := getter.NewDynamicConfigurationGetter(mgr)
 
-	firstRegisterer := topLevelRegisterer.Under("First")
-	secondRegisterer := topLevelRegisterer.Under("Second")
-	firstARegisterer := firstRegisterer.Under("A")
-	firstBRegisterer := firstRegisterer.Under("B")
+	firstGetter := topLevelGetter.Select("First")
+	secondGetter := topLevelGetter.Select("Second")
+	firstAGetter := firstGetter.Select("A")
+	firstBGetter := firstGetter.Select("B")
 
 	copyConfiguration := testutils.MockConfigurationWithTwoDepthLevels{}
 	callbackSecond := func(cfg testutils.MockConfigurationWithOneDepthLevel) error {
@@ -45,18 +45,18 @@ func TestRegistererWithManager(t *testing.T) {
 		return nil
 	}
 
-	if err := firstBRegisterer.Register(callbackFirstA); err == nil ||
+	if err := firstBGetter.Register(callbackFirstA); err == nil ||
 		!errors.Is(err, manager.ErrBadCallback) {
 		t.Fatalf("wrong error when registering bad callback: %v", err)
 	}
 
-	if err := secondRegisterer.Register(callbackSecond); err != nil {
+	if err := secondGetter.Register(callbackSecond); err != nil {
 		t.Fatalf("failed to register callback on Second configuration: %v", err)
 	}
-	if err := firstARegisterer.Register(callbackFirstA); err != nil {
+	if err := firstAGetter.Register(callbackFirstA); err != nil {
 		t.Fatalf("failed to register callback on FirstA configuration: %v", err)
 	}
-	if err := firstBRegisterer.Register(callbackFirstB); err != nil {
+	if err := firstBGetter.Register(callbackFirstB); err != nil {
 		t.Fatalf("failed to register callback on FirstB configuration: %v", err)
 	}
 
@@ -73,7 +73,7 @@ func TestRegistererWithManager(t *testing.T) {
 	}
 }
 
-func TestRegistererOnTopLevel(t *testing.T) {
+func TestGetterOnTopLevel(t *testing.T) {
 	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels](
 		"testRegisterOnTopLevel",
 	)
@@ -86,7 +86,7 @@ func TestRegistererOnTopLevel(t *testing.T) {
 		t.Fatalf("failed to initiate configuration that has two depth levels: %v", err)
 	}
 
-	topLevelRegisterer := registerer.NewDynamicConfigurationRegisterer(mgr)
+	topLevelGetter := getter.NewDynamicConfigurationGetter(mgr)
 
 	copyConfiguration := testutils.MockConfigurationWithTwoDepthLevels{}
 	callback := func(cfg testutils.MockConfigurationWithTwoDepthLevels) error {
@@ -94,7 +94,7 @@ func TestRegistererOnTopLevel(t *testing.T) {
 		return nil
 	}
 
-	if err := topLevelRegisterer.Register(callback); err != nil {
+	if err := topLevelGetter.Register(callback); err != nil {
 		t.Fatalf("failed to register callback: %v", err)
 	}
 
