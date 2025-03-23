@@ -1,4 +1,4 @@
-package listener
+package network
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ type CallbackOptions struct {
 }
 
 type RequestOptions struct {
-	Url         string
+	URL         string
 	Environment string
 	Cluster     string
 	Instance    string
@@ -21,8 +21,8 @@ type RequestOptions struct {
 }
 
 func (opts *RequestOptions) Validate() error {
-	if _, err := url.ParseRequestURI(opts.Url); err != nil {
-		return fmt.Errorf("invalid URL %s: %w", opts.Url, err)
+	if _, err := url.ParseRequestURI(opts.URL); err != nil {
+		return fmt.Errorf("invalid URL %s: %w", opts.URL, err)
 	}
 
 	if len(opts.Sections) == 0 {
@@ -39,7 +39,7 @@ func (opts *RequestOptions) Build() string {
 	params.Set("instance", opts.Instance)
 	params.Set("sections", strings.Join(opts.Sections, ","))
 
-	requestURL := fmt.Sprintf("%s?%s", opts.Url, params.Encode())
+	requestURL := fmt.Sprintf("%s?%s", opts.URL, params.Encode())
 	return requestURL
 }
 
@@ -61,11 +61,56 @@ func (opts *IntervalOptions) Validate() error {
 	return nil
 }
 
+type OutputMode int
+
+const (
+	OutputModeFile OutputMode = iota
+	OutputModeCallback
+)
+
+type OutputOptions struct {
+	Mode     OutputMode
+	Callback func([]byte) error
+	File     string
+}
+
+func (opts *OutputOptions) Validate() error {
+	switch opts.Mode {
+	case OutputModeCallback:
+		if opts.Callback == nil {
+			return fmt.Errorf("nil output callback")
+		}
+		return nil
+	case OutputModeFile:
+		info, err := os.Stat(opts.File)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("output file %s doesn't exist: %w", opts.File, err)
+			}
+			return fmt.Errorf("failed to check if output file %s exists: %w", opts.File, err)
+		}
+
+		if info.IsDir() {
+			return fmt.Errorf("output file %s is a directory", opts.File)
+		}
+
+		file, err := os.OpenFile(opts.File, os.O_WRONLY, 0)
+		if err != nil {
+			return fmt.Errorf("output file %s can't be opened for writing: %w", opts.File, err)
+		}
+		file.Close()
+
+		return nil
+	default:
+		return fmt.Errorf("invalid output callback mode")
+	}
+}
+
 type Options struct {
-	Request    RequestOptions
-	Interval   IntervalOptions
-	Callback   CallbackOptions
-	OutputFile string
+	Request  RequestOptions
+	Interval IntervalOptions
+	Callback CallbackOptions
+	Output   OutputOptions
 }
 
 func (opts *Options) Validate() error {
@@ -74,26 +119,12 @@ func (opts *Options) Validate() error {
 	}
 
 	if err := opts.Interval.Validate(); err != nil {
-		return fmt.Errorf("bad request options: %w", err)
+		return fmt.Errorf("bad interval options: %w", err)
 	}
 
-	info, err := os.Stat(opts.OutputFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("output file %s doesn't exist: %w", opts.OutputFile, err)
-		}
-		return fmt.Errorf("failed to check if output file %s exists: %w", opts.OutputFile, err)
+	if err := opts.Output.Validate(); err != nil {
+		return fmt.Errorf("bad output options: %w", err)
 	}
-
-	if info.IsDir() {
-		return fmt.Errorf("output file %s is a directory", opts.OutputFile)
-	}
-
-	file, err := os.OpenFile(opts.OutputFile, os.O_WRONLY, 0)
-	if err != nil {
-		return fmt.Errorf("output file %s can't be opened for writing: %w", opts.OutputFile, err)
-	}
-	file.Close()
 
 	return nil
 }

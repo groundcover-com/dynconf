@@ -1,4 +1,4 @@
-package listener
+package network
 
 import (
 	"context"
@@ -29,16 +29,14 @@ func Listen(
 	id string,
 	ctx context.Context,
 	options Options,
-	outputFile string,
 ) (*NetworkListener, error) {
-	return ListenWithClient(id, ctx, options, outputFile, &http.Client{})
+	return ListenWithClient(id, ctx, options, &http.Client{})
 }
 
 func ListenWithClient(
 	id string,
 	ctx context.Context,
 	options Options,
-	outputFile string,
 	httpClient *http.Client,
 ) (*NetworkListener, error) {
 	if err := options.Validate(); err != nil {
@@ -107,8 +105,24 @@ func (nl *NetworkListener) fetchConfig() ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func (nl *NetworkListener) writeConfigToFile(data []byte) error {
-	return os.WriteFile(nl.options.OutputFile, data, 0644)
+func (nl *NetworkListener) outputConfig(data []byte) error {
+	switch nl.options.Output.Mode {
+	case OutputModeCallback:
+		err := nl.options.Output.Callback(data)
+		if err != nil {
+			nl.metrics.errorInOutputCallback.Inc()
+		}
+		return err
+	case OutputModeFile:
+		err := os.WriteFile(nl.options.Output.File, data, 0644)
+		if err != nil {
+			nl.metrics.errorWritingConfigurationToFile.Inc()
+		}
+		return err
+	default:
+		// can't be reached, we validated the output mode
+		return fmt.Errorf("invalid output mode")
+	}
 }
 
 func (nl *NetworkListener) fetchConfigCycle() {
@@ -123,10 +137,9 @@ func (nl *NetworkListener) fetchConfigCycle() {
 		return
 	}
 
-	if err := nl.writeConfigToFile(data); err != nil {
-		nl.metrics.errorWritingConfigurationToFile.Inc()
+	if err := nl.outputConfig(data); err != nil {
 		if nl.options.Callback.OnFetchError != nil {
-			nl.options.Callback.OnFetchError(fmt.Errorf("error writing configuration to file: %w", err))
+			nl.options.Callback.OnFetchError(fmt.Errorf("error outputting configuration: %w", err))
 		}
 		return
 	}
