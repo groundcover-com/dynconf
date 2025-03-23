@@ -22,7 +22,7 @@ type DynamicConfigurable[Configuration any] interface {
 	OnConfigurationUpdate(newConfiguration Configuration) error
 }
 
-type DynamicConfigurationListener[Configuration any] struct {
+type ConfigurationFileListener[Configuration any] struct {
 	dynamicConfigurable DynamicConfigurable[Configuration]
 	options             Options
 
@@ -30,12 +30,12 @@ type DynamicConfigurationListener[Configuration any] struct {
 	updateLock    sync.Mutex
 }
 
-func NewDynamicConfigurationListener[Configuration any](
+func NewConfigurationFileListener[Configuration any](
 	id string,
 	file string,
 	dynamicConfigurable DynamicConfigurable[Configuration],
 	options Options,
-) (*DynamicConfigurationListener[Configuration], error) {
+) (*ConfigurationFileListener[Configuration], error) {
 	metricFailedToUpdateDynamicConfiguration := metrics_factory.CreateErrorCounter(
 		listenerMetricName,
 		map[string]string{
@@ -45,7 +45,7 @@ func NewDynamicConfigurationListener[Configuration any](
 		},
 	)
 
-	listener := &DynamicConfigurationListener[Configuration]{
+	listener := &ConfigurationFileListener[Configuration]{
 		options:             options,
 		dynamicConfigurable: dynamicConfigurable,
 	}
@@ -80,11 +80,11 @@ func NewDynamicConfigurationListener[Configuration any](
 	return listener, nil
 }
 
-func (listener *DynamicConfigurationListener[Configuration]) GetConfiguration() Configuration {
+func (listener *ConfigurationFileListener[Configuration]) GetConfiguration() Configuration {
 	return listener.configuration
 }
 
-func (listener *DynamicConfigurationListener[Configuration]) update(vpr *viper.Viper) error {
+func (listener *ConfigurationFileListener[Configuration]) update(vpr *viper.Viper) error {
 	listener.updateLock.Lock()
 	defer listener.updateLock.Unlock()
 

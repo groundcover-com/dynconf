@@ -3,6 +3,7 @@ package listener
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -75,6 +76,24 @@ func (opts *Options) Validate() error {
 	if err := opts.Interval.Validate(); err != nil {
 		return fmt.Errorf("bad request options: %w", err)
 	}
+
+	info, err := os.Stat(opts.OutputFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("output file %s doesn't exist: %w", opts.OutputFile, err)
+		}
+		return fmt.Errorf("failed to check if output file %s exists: %w", opts.OutputFile, err)
+	}
+
+	if info.IsDir() {
+		return fmt.Errorf("output file %s is a directory", opts.OutputFile)
+	}
+
+	file, err := os.OpenFile(opts.OutputFile, os.O_WRONLY, 0)
+	if err != nil {
+		return fmt.Errorf("output file %s can't be opened for writing: %w", opts.OutputFile, err)
+	}
+	file.Close()
 
 	return nil
 }

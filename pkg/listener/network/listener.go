@@ -28,9 +28,10 @@ func Listen(
 	id string,
 	ctx context.Context,
 	options Options,
+	outputFile string,
 ) (*NetworkListener, error) {
 	if err := options.Validate(); err != nil {
-		return nil, fmt.Errorf("bad options: %w", err)
+		return nil, fmt.Errorf("invalid options: %w", err)
 	}
 
 	listener := NetworkListener{
