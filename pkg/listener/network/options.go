@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+type CallbackOptions struct {
+	OnFetchError func(error)
+}
+
 type RequestOptions struct {
 	Url         string
 	Environment string
@@ -39,12 +43,13 @@ func (opts *RequestOptions) Build() string {
 }
 
 type IntervalOptions struct {
-	RequestInterval      time.Duration
-	MaximumInitialJitter time.Duration
+	RequestIntervalEnabled bool
+	RequestInterval        time.Duration
+	MaximumInitialJitter   time.Duration
 }
 
 func (opts *IntervalOptions) Validate() error {
-	if opts.RequestInterval < 0 {
+	if opts.RequestIntervalEnabled && opts.RequestInterval < 0 {
 		return fmt.Errorf("invalid request interval %v", opts.RequestInterval)
 	}
 
@@ -58,6 +63,7 @@ func (opts *IntervalOptions) Validate() error {
 type Options struct {
 	Request    RequestOptions
 	Interval   IntervalOptions
+	Callback   CallbackOptions
 	OutputFile string
 }
 

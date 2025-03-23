@@ -15,6 +15,8 @@ type NetworkListener struct {
 	ctx     context.Context
 	options Options
 
+	metrics *NetworkListenerMetrics
+
 	triggerChannel       chan struct{}
 	triggerChannelLock   sync.Mutex
 	triggerChannelIsOpen bool
@@ -23,6 +25,7 @@ type NetworkListener struct {
 }
 
 func Listen(
+	id string,
 	ctx context.Context,
 	options Options,
 ) (*NetworkListener, error) {
@@ -33,7 +36,8 @@ func Listen(
 	listener := NetworkListener{
 		ctx:                  ctx,
 		options:              options,
-		triggerChannel:       make(chan struct{}, 1),
+		metrics:              NewNetworkListenerMetrics(id),
+		triggerChannel:       make(chan struct{}),
 		triggerChannelIsOpen: true,
 		url:                  options.Request.Build(),
 	}
@@ -89,17 +93,21 @@ func (nl *NetworkListener) writeConfigToFile(data []byte) error {
 	return os.WriteFile(nl.options.OutputFile, data, 0644)
 }
 
-func (nl *NetworkListener) fetchConfigCycle() error {
+func (nl *NetworkListener) fetchConfigCycle() {
 	data, err := nl.fetchConfig()
 	if err != nil {
-		return fmt.Errorf("error fetching config: %w", err)
+		nl.metrics.errorFetchingConfiguration.Inc()
+		if nl.options.Callback.OnFetchError != nil {
+			nl.options.Callback.OnFetchError(fmt.Errorf("error fetching configuration: %w", err))
+		}
 	}
 
 	if err := nl.writeConfigToFile(data); err != nil {
-		return fmt.Errorf("error writing config to file: %w", err)
+		nl.metrics.errorWritingConfigurationToFile.Inc()
+		if nl.options.Callback.OnFetchError != nil {
+			nl.options.Callback.OnFetchError(fmt.Errorf("error writing configuration to file: %w", err))
+		}
 	}
-
-	return nil
 }
 
 func (nl *NetworkListener) initialJitter() bool {
@@ -129,18 +137,28 @@ func (nl *NetworkListener) start() {
 
 	nl.fetchConfigCycle()
 
-	ticker := time.NewTicker(nl.options.Interval.RequestInterval)
-	defer ticker.Stop()
+	var tickerChannel <-chan time.Time
+	tickerResetFunc := func() {}
+	if nl.options.Interval.RequestIntervalEnabled {
+		ticker := time.NewTicker(nl.options.Interval.RequestInterval)
+		defer ticker.Stop()
+		tickerChannel = ticker.C
+		tickerResetFunc = func() { ticker.Reset(nl.options.Interval.RequestInterval) }
+	} else {
+		tickerChannelNew := make(chan time.Time)
+		defer close(tickerChannelNew)
+		tickerChannel = tickerChannelNew
+	}
 
 	for {
 		select {
 		case <-nl.ctx.Done():
 			return
-		case <-ticker.C:
+		case <-tickerChannel:
 			nl.fetchConfigCycle()
 		case <-nl.triggerChannel:
 			nl.fetchConfigCycle()
-			ticker.Reset(nl.options.Interval.RequestInterval)
+			tickerResetFunc()
 		}
 	}
 }
