@@ -107,8 +107,15 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 			t.Fatalf("failed to close server: %v", err)
 		}
 	}()
+
+	// wait for http server to get up
 	time.Sleep(time.Millisecond * 5)
 
+	configUpdatedChannel := make(chan struct{})
+	defer close(configUpdatedChannel)
+	onConfigurationUpdateSuccess := func() {
+		configUpdatedChannel <- struct{}{}
+	}
 	_, err = fileListener.NewConfigurationFileListener(
 		"id",
 		fileName,
@@ -120,6 +127,9 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 			BaseConfiguration: fileListener.BaseConfigurationOptions{
 				Type:   fileListener.BaseConfigurationTypeString,
 				String: MockConfigurationWithTwoDepthLevelsYAML,
+			},
+			Callbacks: fileListener.Callbacks{
+				OnConfigurationUpdateSuccess: onConfigurationUpdateSuccess,
 			},
 		},
 	)
@@ -146,7 +156,11 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 		},
 	)
 
-	time.Sleep(time.Millisecond * 5)
+	select {
+	case <-configUpdatedChannel:
+	case <-time.After(time.Millisecond * 100):
+		t.Fatalf("timeout when awaiting configuration updated callback")
+	}
 
 	if !reflect.DeepEqual(copyConfiguration, mockConfiguration) {
 		t.Fatalf(

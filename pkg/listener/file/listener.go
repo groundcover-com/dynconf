@@ -1,4 +1,4 @@
-package listener
+package file
 
 import (
 	"fmt"
@@ -74,6 +74,10 @@ func NewConfigurationFileListener[Configuration any](
 			if options.Callbacks.OnConfigurationUpdateFailure != nil {
 				options.Callbacks.OnConfigurationUpdateFailure(err)
 			}
+			return
+		}
+		if options.Callbacks.OnConfigurationUpdateSuccess != nil {
+			options.Callbacks.OnConfigurationUpdateSuccess()
 		}
 	})
 

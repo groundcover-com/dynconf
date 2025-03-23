@@ -1,4 +1,4 @@
-package listener
+package file
 
 import (
 	"errors"
@@ -85,4 +85,5 @@ func (options *ViperOptions) New() *viper.Viper {
 
 type Callbacks struct {
 	OnConfigurationUpdateFailure func(error)
+	OnConfigurationUpdateSuccess func()
 }
