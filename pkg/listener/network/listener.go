@@ -21,7 +21,8 @@ type NetworkListener struct {
 	triggerChannelLock   sync.Mutex
 	triggerChannelIsOpen bool
 
-	url string
+	url        string
+	httpClient *http.Client
 }
 
 func Listen(
@@ -29,6 +30,16 @@ func Listen(
 	ctx context.Context,
 	options Options,
 	outputFile string,
+) (*NetworkListener, error) {
+	return ListenWithClient(id, ctx, options, outputFile, &http.Client{})
+}
+
+func ListenWithClient(
+	id string,
+	ctx context.Context,
+	options Options,
+	outputFile string,
+	httpClient *http.Client,
 ) (*NetworkListener, error) {
 	if err := options.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)
@@ -41,6 +52,7 @@ func Listen(
 		triggerChannel:       make(chan struct{}),
 		triggerChannelIsOpen: true,
 		url:                  options.Request.Build(),
+		httpClient:           httpClient,
 	}
 
 	go listener.start()
@@ -77,7 +89,12 @@ func (nl *NetworkListener) randomInitialJitter() time.Duration {
 }
 
 func (nl *NetworkListener) fetchConfig() ([]byte, error) {
-	resp, err := http.Get(nl.url)
+	req, err := http.NewRequestWithContext(nl.ctx, "GET", nl.url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := nl.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch configuration: %w", err)
 	}
@@ -95,12 +112,15 @@ func (nl *NetworkListener) writeConfigToFile(data []byte) error {
 }
 
 func (nl *NetworkListener) fetchConfigCycle() {
+	startTime := time.Now()
+
 	data, err := nl.fetchConfig()
 	if err != nil {
 		nl.metrics.errorFetchingConfiguration.Inc()
 		if nl.options.Callback.OnFetchError != nil {
 			nl.options.Callback.OnFetchError(fmt.Errorf("error fetching configuration: %w", err))
 		}
+		return
 	}
 
 	if err := nl.writeConfigToFile(data); err != nil {
@@ -108,7 +128,10 @@ func (nl *NetworkListener) fetchConfigCycle() {
 		if nl.options.Callback.OnFetchError != nil {
 			nl.options.Callback.OnFetchError(fmt.Errorf("error writing configuration to file: %w", err))
 		}
+		return
 	}
+
+	nl.metrics.requestDuration.UpdateDuration(startTime)
 }
 
 func (nl *NetworkListener) initialJitter() bool {
