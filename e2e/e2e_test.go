@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -111,10 +112,25 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 	// wait for http server to get up
 	time.Sleep(time.Millisecond * 5)
 
+	onConfigurationUpdateSuccessLock := sync.Mutex{}
+	configUpdatedChannelOpen := true
 	configUpdatedChannel := make(chan struct{})
-	defer close(configUpdatedChannel)
+	defer func() {
+		onConfigurationUpdateSuccessLock.Lock()
+		defer onConfigurationUpdateSuccessLock.Unlock()
+		close(configUpdatedChannel)
+		configUpdatedChannelOpen = false
+	}()
 	onConfigurationUpdateSuccess := func() {
-		configUpdatedChannel <- struct{}{}
+		onConfigurationUpdateSuccessLock.Lock()
+		defer onConfigurationUpdateSuccessLock.Unlock()
+		if !configUpdatedChannelOpen {
+			return
+		}
+		select {
+		case configUpdatedChannel <- struct{}{}:
+		default:
+		}
 	}
 	_, err = fileListener.NewConfigurationFileListener(
 		"id",
