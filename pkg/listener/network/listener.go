@@ -16,7 +16,7 @@ import (
 type ConfigurationNetworkListener[Configuration any] struct {
 	ctx                 context.Context
 	dynamicConfigurable listener.DynamicConfigurable[Configuration]
-	options             Options[Configuration]
+	options             Options
 
 	cfg Configuration
 
@@ -34,7 +34,7 @@ func NewConfigurationNetworkListener[Configuration any](
 	id string,
 	ctx context.Context,
 	dynamicConfigurable listener.DynamicConfigurable[Configuration],
-	options Options[Configuration],
+	options Options,
 ) (*ConfigurationNetworkListener[Configuration], error) {
 	return NewConfigurationNetworkListenerWithClient(id, ctx, dynamicConfigurable, options, &http.Client{})
 }
@@ -43,7 +43,7 @@ func NewConfigurationNetworkListenerWithClient[Configuration any](
 	id string,
 	ctx context.Context,
 	dynamicConfigurable listener.DynamicConfigurable[Configuration],
-	options Options[Configuration],
+	options Options,
 	httpClient *http.Client,
 ) (*ConfigurationNetworkListener[Configuration], error) {
 	if err := options.Validate(); err != nil {

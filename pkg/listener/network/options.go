@@ -111,7 +111,7 @@ const (
 	OutputModeCallback
 )
 
-type Options[Configuration any] struct {
+type Options struct {
 	Request  RequestOptions
 	Interval IntervalOptions
 	// The base configuration is the configuration that you start with. Its options define things like where it
@@ -120,7 +120,7 @@ type Options[Configuration any] struct {
 	Callback          CallbackOptions
 }
 
-func (opts *Options[Configuration]) Validate() error {
+func (opts *Options) Validate() error {
 	if err := opts.Request.Validate(); err != nil {
 		return fmt.Errorf("bad request options: %w", err)
 	}

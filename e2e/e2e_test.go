@@ -52,6 +52,7 @@ func createManagerWithRegisteredConfigurables(
 
 	copyConfiguration := cnf{}
 	callbackSecond := func(cfg testutils.MockConfigurationWithOneDepthLevel) error {
+		fmt.Printf("callback second\n")
 		copyConfiguration.Second = cfg
 		return nil
 	}
@@ -203,17 +204,14 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 		t.Fatalf("failed to initiate configuration file listener: %v", err)
 	}
 
-	_, err = networkListener.Listen(
+	_, err = networkListener.NewConfigurationNetworkListener(
 		"id",
 		context.Background(),
-		network.Options{
+		mgr,
+		networkListener.Options{
 			Request: network.RequestOptions{
 				URL:      fmt.Sprintf("http://localhost:%d", port),
 				Sections: []string{"First", "Second"},
-			},
-			Output: network.OutputOptions{
-				Mode: network.OutputModeFile,
-				File: fileName,
 			},
 			Interval: network.IntervalOptions{
 				RequestIntervalEnabled: false,
@@ -224,6 +222,7 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 
 	select {
 	case <-configUpdatedChannel:
+		t.Log("configuration update notification received")
 	case <-time.After(time.Millisecond * 100):
 		t.Fatalf("timeout when awaiting configuration updated callback")
 	}
