@@ -34,7 +34,7 @@ func NewConfigurationNetworkListener[Configuration any](
 	ctx context.Context,
 	options Options[Configuration],
 ) (*ConfigurationNetworkListener[Configuration], error) {
-	return NewConfigurationNetworkListenerWithClient[Configuration](id, ctx, options, &http.Client{})
+	return NewConfigurationNetworkListenerWithClient(id, ctx, options, &http.Client{})
 }
 
 func NewConfigurationNetworkListenerWithClient[Configuration any](
