@@ -9,11 +9,15 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
-type NetworkListener struct {
+type NetworkListener[Configuration any] struct {
 	ctx     context.Context
-	options Options
+	options Options[Configuration]
+
+	cfg Configuration
 
 	metrics *NetworkListenerMetrics
 
@@ -25,25 +29,25 @@ type NetworkListener struct {
 	httpClient *http.Client
 }
 
-func Listen(
+func NewConfigurationNetworkListener[Configuration any](
 	id string,
 	ctx context.Context,
-	options Options,
-) (*NetworkListener, error) {
-	return ListenWithClient(id, ctx, options, &http.Client{})
+	options Options[Configuration],
+) (*NetworkListener[Configuration], error) {
+	return NewConfigurationNetworkListenerWithClient[Configuration](id, ctx, options, &http.Client{})
 }
 
-func ListenWithClient(
+func NewConfigurationNetworkListenerWithClient[Configuration any](
 	id string,
 	ctx context.Context,
-	options Options,
+	options Options[Configuration],
 	httpClient *http.Client,
-) (*NetworkListener, error) {
+) (*NetworkListener[Configuration], error) {
 	if err := options.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
 
-	listener := NetworkListener{
+	listener := NetworkListener[Configuration]{
 		ctx:                  ctx,
 		options:              options,
 		metrics:              NewNetworkListenerMetrics(id),
@@ -60,7 +64,7 @@ func ListenWithClient(
 
 // Trigger an immediate request.
 // This resets the ticker so that even if a request was due momentarily, it won't be sent.
-func (nl *NetworkListener) Trigger() {
+func (nl *NetworkListener[Configuration]) Trigger() {
 	nl.triggerChannelLock.Lock()
 	defer nl.triggerChannelLock.Unlock()
 
@@ -74,7 +78,7 @@ func (nl *NetworkListener) Trigger() {
 	}
 }
 
-func (nl *NetworkListener) closeTriggerChannel() {
+func (nl *NetworkListener[Configuration]) closeTriggerChannel() {
 	nl.triggerChannelLock.Lock()
 	defer nl.triggerChannelLock.Unlock()
 
@@ -82,11 +86,11 @@ func (nl *NetworkListener) closeTriggerChannel() {
 	close(nl.triggerChannel)
 }
 
-func (nl *NetworkListener) randomInitialJitter() time.Duration {
+func (nl *NetworkListener[Configuration]) randomInitialJitter() time.Duration {
 	return time.Duration(rand.Int63n(int64(nl.options.Interval.MaximumInitialJitter)))
 }
 
-func (nl *NetworkListener) fetchConfig() ([]byte, error) {
+func (nl *NetworkListener[Configuration]) fetchConfig() ([]byte, error) {
 	req, err := http.NewRequestWithContext(nl.ctx, "GET", nl.url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -105,27 +109,53 @@ func (nl *NetworkListener) fetchConfig() ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func (nl *NetworkListener) outputConfig(data []byte) error {
+func (nl *NetworkListener[Configuration]) outputConfig(data []byte) error {
+	baseConfig, err := nl.options.BaseConfiguration.Unmarshal()
+	if err != nil {
+		nl.metrics.errorUnmarshalingBaseConfiguration.Inc()
+		return fmt.Errorf("failed to unmarshal base configuration: %w", err)
+	}
+
+	overrides := make(map[string]any)
+	if err := yaml.Unmarshal(data, &overrides); err != nil {
+		return fmt.Errorf("failed to unmarshal received configuration: %w", err)
+	}
+
+	mergedMap := mergeMaps(baseConfig, overrides)
+	mergedYamlConfigurationBytes, err := yaml.Marshal(mergedMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal merged configuration into yaml: %w", err)
+	}
+
+	var config Configuration
+	if err := yaml.Unmarshal(mergedYamlConfigurationBytes, &config); err != nil {
+		return fmt.Errorf("failed to unmarshal merged configuration: %w", err)
+	}
+
 	switch nl.options.Output.Mode {
 	case OutputModeCallback:
-		err := nl.options.Output.Callback(data)
+		err := nl.options.Output.Callback(config)
 		if err != nil {
 			nl.metrics.errorInOutputCallback.Inc()
+			return err
 		}
-		return err
+		nl.cfg = config
+		return nil
 	case OutputModeFile:
 		err := os.WriteFile(nl.options.Output.File, data, 0644)
 		if err != nil {
 			nl.metrics.errorWritingConfigurationToFile.Inc()
+			return err
 		}
-		return err
+		nl.cfg = config
+		return nil
 	default:
 		// can't be reached, we validated the output mode
 		return fmt.Errorf("invalid output mode")
 	}
 }
 
-func (nl *NetworkListener) fetchConfigCycle() {
+func (nl *NetworkListener[Configuration]) fetchConfigCycle() {
 	startTime := time.Now()
 
 	data, err := nl.fetchConfig()
@@ -147,7 +177,7 @@ func (nl *NetworkListener) fetchConfigCycle() {
 	nl.metrics.requestDuration.UpdateDuration(startTime)
 }
 
-func (nl *NetworkListener) initialJitter() bool {
+func (nl *NetworkListener[Configuration]) initialJitter() bool {
 	if nl.options.Interval.MaximumInitialJitter == 0 {
 		return false
 	}
@@ -165,7 +195,7 @@ func (nl *NetworkListener) initialJitter() bool {
 	return false
 }
 
-func (nl *NetworkListener) start() {
+func (nl *NetworkListener[Configuration]) start() {
 	defer nl.closeTriggerChannel()
 
 	if nl.initialJitter() {
@@ -198,4 +228,27 @@ func (nl *NetworkListener) start() {
 			tickerResetFunc()
 		}
 	}
+}
+
+func mergeMaps(base map[string]any, override map[string]any) map[string]interface{} {
+	merged := make(map[string]any)
+	for k, v := range base {
+		merged[k] = v
+	}
+
+	for overrideKey, overrideValue := range override {
+		baseValueAsMap, baseValueIsMap := base[overrideKey].(map[string]any)
+		if !baseValueIsMap {
+			merged[overrideKey] = overrideValue
+			continue
+		}
+
+		overrideValueAsMap, overrideValueIsMap := overrideValue.(map[string]any)
+		if !overrideValueIsMap {
+			continue
+		}
+		merged[overrideKey] = mergeMaps(baseValueAsMap, overrideValueAsMap)
+	}
+
+	return merged
 }

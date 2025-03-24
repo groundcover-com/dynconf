@@ -1,12 +1,55 @@
 package network
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
+
+var (
+	ErrInvalidBaseConfigurationType = errors.New("invalid default configuration type")
+)
+
+type BaseConfigurationType uint32
+
+const (
+	BaseConfigurationTypeString BaseConfigurationType = iota
+	BaseConfigurationTypeFile
+)
+
+type BaseConfigurationOptions struct {
+	Type   BaseConfigurationType
+	String string
+	File   string
+}
+
+func (options *BaseConfigurationOptions) Unmarshal() (map[string]any, error) {
+	result := make(map[string]any)
+	var bytes []byte
+
+	switch options.Type {
+	case BaseConfigurationTypeString:
+		bytes = []byte(options.String)
+	case BaseConfigurationTypeFile:
+		data, err := os.ReadFile(options.File)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file %s: %w", options.File, err)
+		}
+		bytes = data
+	default:
+		return nil, ErrInvalidBaseConfigurationType
+	}
+
+	if err := yaml.Unmarshal(bytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal base configuration: %w", err)
+	}
+	return result, nil
+}
 
 type CallbackOptions struct {
 	OnFetchError func(error)
@@ -68,13 +111,13 @@ const (
 	OutputModeCallback
 )
 
-type OutputOptions struct {
+type OutputOptions[Configuration any] struct {
 	Mode     OutputMode
-	Callback func([]byte) error
+	Callback func(Configuration) error
 	File     string
 }
 
-func (opts *OutputOptions) Validate() error {
+func (opts *OutputOptions[Configuration]) Validate() error {
 	switch opts.Mode {
 	case OutputModeCallback:
 		if opts.Callback == nil {
@@ -106,14 +149,17 @@ func (opts *OutputOptions) Validate() error {
 	}
 }
 
-type Options struct {
+type Options[Configuration any] struct {
 	Request  RequestOptions
 	Interval IntervalOptions
-	Callback CallbackOptions
-	Output   OutputOptions
+	// The base configuration is the configuration that you start with. Its options define things like where it
+	// originates from (etc. a file or a string).
+	BaseConfiguration BaseConfigurationOptions
+	Callback          CallbackOptions
+	Output            OutputOptions[Configuration]
 }
 
-func (opts *Options) Validate() error {
+func (opts *Options[Configuration]) Validate() error {
 	if err := opts.Request.Validate(); err != nil {
 		return fmt.Errorf("bad request options: %w", err)
 	}
