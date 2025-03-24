@@ -8,12 +8,33 @@ import (
 	"testing"
 	"time"
 
+	"github.com/groundcover-com/dynconf/internal/testutils"
 	"github.com/groundcover-com/dynconf/pkg/listener/network"
 )
 
 const (
-	fileContents   = `{"config": "mocked_data"}`
 	requestTimeout = time.Millisecond * 10
+
+	fileContents = `
+First:
+  A:
+    Value: "some_value_A"
+  B:
+    Value: true
+`
+
+	base = `
+First:
+  A:
+    Value: "baseFirst"
+  B:
+    Value: true
+Second:
+  A:
+    Value: "baseSecond"
+  B:
+    Value: true
+`
 )
 
 type mockServer struct {
@@ -25,9 +46,17 @@ func (server *mockServer) mockServerResponse(w http.ResponseWriter, r *http.Requ
 	fmt.Fprintln(w, fileContents)
 }
 
-func initiateListener(id string) (server *mockServer, channel <-chan []byte, cleanup func(), err error) {
+type dynamicConfigurable[T any] struct {
+	callback func(T) error
+}
+
+func (dc dynamicConfigurable[T]) OnConfigurationUpdate(t T) error {
+	return dc.callback(t)
+}
+
+func initiateListener[T any](id string) (server *mockServer, channel <-chan T, cleanup func(), err error) {
 	var httpServer *httptest.Server
-	var dataChan *chan []byte
+	var dataChan *chan T
 	var ctxCancel context.CancelFunc
 	cleanup = func() {
 		if server != nil {
@@ -44,32 +73,42 @@ func initiateListener(id string) (server *mockServer, channel <-chan []byte, cle
 	ms := mockServer{}
 	httpServer = httptest.NewServer(http.HandlerFunc(ms.mockServerResponse))
 
-	ch := make(chan []byte, 10)
+	ch := make(chan T, 10)
+	myConfigurable := dynamicConfigurable[testutils.MockConfigurationWithTwoDepthLevels]{
+		callback: func(cfg testutils.MockConfigurationWithTwoDepthLevels) error {
+			ch <- cfg
+			return nil
+		},
+	}
 	dataChan = &ch
+
 	options := network.Options{
 		Request: network.RequestOptions{
 			URL:      httpServer.URL,
 			Sections: []string{"section1"},
 		},
-		Output: network.OutputOptions{
-			Mode: network.OutputModeCallback,
-			Callback: func(b []byte) error {
-				ch <- b
-				return nil
-			},
-		},
 		Interval: network.IntervalOptions{
 			RequestIntervalEnabled: false,
 			MaximumInitialJitter:   0,
+		},
+		BaseConfiguration: network.BaseConfigurationOptions{
+			Type:   network.BaseConfigurationTypeString,
+			String: base,
 		},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctxCancel = cancel
 
-	_, err = network.ListenWithClient(id, ctx, options, httpServer.Client())
+	_, err = network.NewConfigurationNetworkListenerWithClient[testutils.MockConfigurationWithTwoDepthLevels](
+		id,
+		ctx,
+		myConfigurable,
+		options,
+		httpServer.Client(),
+	)
 	if err != nil {
-		return nil, nil, cleanup, fmt.Errorf("Failed to create listener %s: %w", id, err)
+		return nil, nil, cleanup, fmt.Errorf("failed to create listener %s: %w", id, err)
 	}
 
 	return &ms, ch, cleanup, nil
