@@ -6,16 +6,17 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
+	"github.com/groundcover-com/dynconf/pkg/listener"
 	"gopkg.in/yaml.v3"
 )
 
 type ConfigurationNetworkListener[Configuration any] struct {
-	ctx     context.Context
-	options Options[Configuration]
+	ctx                 context.Context
+	dynamicConfigurable listener.DynamicConfigurable[Configuration]
+	options             Options[Configuration]
 
 	cfg Configuration
 
@@ -32,14 +33,16 @@ type ConfigurationNetworkListener[Configuration any] struct {
 func NewConfigurationNetworkListener[Configuration any](
 	id string,
 	ctx context.Context,
+	dynamicConfigurable listener.DynamicConfigurable[Configuration],
 	options Options[Configuration],
 ) (*ConfigurationNetworkListener[Configuration], error) {
-	return NewConfigurationNetworkListenerWithClient(id, ctx, options, &http.Client{})
+	return NewConfigurationNetworkListenerWithClient(id, ctx, dynamicConfigurable, options, &http.Client{})
 }
 
 func NewConfigurationNetworkListenerWithClient[Configuration any](
 	id string,
 	ctx context.Context,
+	dynamicConfigurable listener.DynamicConfigurable[Configuration],
 	options Options[Configuration],
 	httpClient *http.Client,
 ) (*ConfigurationNetworkListener[Configuration], error) {
@@ -49,6 +52,7 @@ func NewConfigurationNetworkListenerWithClient[Configuration any](
 
 	listener := ConfigurationNetworkListener[Configuration]{
 		ctx:                  ctx,
+		dynamicConfigurable:  dynamicConfigurable,
 		options:              options,
 		metrics:              NewNetworkListenerMetrics(id),
 		triggerChannel:       make(chan struct{}),
@@ -136,27 +140,12 @@ func (nl *ConfigurationNetworkListener[Configuration]) outputConfig(data []byte)
 		return fmt.Errorf("failed to unmarshal merged configuration: %w", err)
 	}
 
-	switch nl.options.Output.Mode {
-	case OutputModeCallback:
-		err := nl.options.Output.Callback(config)
-		if err != nil {
-			nl.metrics.errorInOutputCallback.Inc()
-			return err
-		}
-		nl.cfg = config
-		return nil
-	case OutputModeFile:
-		err := os.WriteFile(nl.options.Output.File, data, 0644)
-		if err != nil {
-			nl.metrics.errorWritingConfigurationToFile.Inc()
-			return err
-		}
-		nl.cfg = config
-		return nil
-	default:
-		// can't be reached, we validated the output mode
-		return fmt.Errorf("invalid output mode")
+	if err := nl.dynamicConfigurable.OnConfigurationUpdate(config); err != nil {
+		return fmt.Errorf("failed to update configuration: %w", err)
 	}
+
+	nl.cfg = config
+	return nil
 }
 
 func (nl *ConfigurationNetworkListener[Configuration]) fetchConfigCycle() {

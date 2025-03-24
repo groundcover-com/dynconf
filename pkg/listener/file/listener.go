@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/groundcover-com/dynconf/pkg/listener"
 	metrics_factory "github.com/groundcover-com/metrics/pkg/factory"
 	"github.com/spf13/viper"
 )
@@ -18,12 +19,8 @@ const (
 	filepathMetricKey    = "filepath"
 )
 
-type DynamicConfigurable[Configuration any] interface {
-	OnConfigurationUpdate(newConfiguration Configuration) error
-}
-
 type ConfigurationFileListener[Configuration any] struct {
-	dynamicConfigurable DynamicConfigurable[Configuration]
+	dynamicConfigurable listener.DynamicConfigurable[Configuration]
 	options             Options
 
 	configuration Configuration
@@ -33,7 +30,7 @@ type ConfigurationFileListener[Configuration any] struct {
 func NewConfigurationFileListener[Configuration any](
 	id string,
 	file string,
-	dynamicConfigurable DynamicConfigurable[Configuration],
+	dynamicConfigurable listener.DynamicConfigurable[Configuration],
 	options Options,
 ) (*ConfigurationFileListener[Configuration], error) {
 	metricFailedToUpdateDynamicConfiguration := metrics_factory.CreateErrorCounter(

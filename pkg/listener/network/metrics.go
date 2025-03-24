@@ -18,8 +18,6 @@ type NetworkListenerMetrics struct {
 	requestDuration                    *metrics_types.Summary
 	errorUnmarshalingBaseConfiguration *metrics_types.LazyCounter
 	errorFetchingConfiguration         *metrics_types.LazyCounter
-	errorWritingConfigurationToFile    *metrics_types.LazyCounter
-	errorInOutputCallback              *metrics_types.LazyCounter
 }
 
 func NewNetworkListenerMetrics(id string) *NetworkListenerMetrics {
@@ -35,14 +33,6 @@ func NewNetworkListenerMetrics(id string) *NetworkListenerMetrics {
 		errorFetchingConfiguration: metrics_factory.CreateErrorCounter(
 			errorMetricName,
 			map[string]string{errorMetricKey: "error_fetching_configuration", idMetricKey: id},
-		),
-		errorWritingConfigurationToFile: metrics_factory.CreateErrorCounter(
-			errorMetricName,
-			map[string]string{errorMetricKey: "error_wring_configuration_to_file", idMetricKey: id},
-		),
-		errorInOutputCallback: metrics_factory.CreateErrorCounter(
-			errorMetricName,
-			map[string]string{errorMetricKey: "error_in_output_callback", idMetricKey: id},
 		),
 	}
 }

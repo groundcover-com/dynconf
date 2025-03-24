@@ -111,44 +111,6 @@ const (
 	OutputModeCallback
 )
 
-type OutputOptions[Configuration any] struct {
-	Mode     OutputMode
-	Callback func(Configuration) error
-	File     string
-}
-
-func (opts *OutputOptions[Configuration]) Validate() error {
-	switch opts.Mode {
-	case OutputModeCallback:
-		if opts.Callback == nil {
-			return fmt.Errorf("nil output callback")
-		}
-		return nil
-	case OutputModeFile:
-		info, err := os.Stat(opts.File)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("output file %s doesn't exist: %w", opts.File, err)
-			}
-			return fmt.Errorf("failed to check if output file %s exists: %w", opts.File, err)
-		}
-
-		if info.IsDir() {
-			return fmt.Errorf("output file %s is a directory", opts.File)
-		}
-
-		file, err := os.OpenFile(opts.File, os.O_WRONLY, 0)
-		if err != nil {
-			return fmt.Errorf("output file %s can't be opened for writing: %w", opts.File, err)
-		}
-		file.Close()
-
-		return nil
-	default:
-		return fmt.Errorf("invalid output callback mode")
-	}
-}
-
 type Options[Configuration any] struct {
 	Request  RequestOptions
 	Interval IntervalOptions
@@ -156,7 +118,6 @@ type Options[Configuration any] struct {
 	// originates from (etc. a file or a string).
 	BaseConfiguration BaseConfigurationOptions
 	Callback          CallbackOptions
-	Output            OutputOptions[Configuration]
 }
 
 func (opts *Options[Configuration]) Validate() error {
@@ -166,10 +127,6 @@ func (opts *Options[Configuration]) Validate() error {
 
 	if err := opts.Interval.Validate(); err != nil {
 		return fmt.Errorf("bad interval options: %w", err)
-	}
-
-	if err := opts.Output.Validate(); err != nil {
-		return fmt.Errorf("bad output options: %w", err)
 	}
 
 	return nil
