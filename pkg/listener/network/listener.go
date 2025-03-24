@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type NetworkListener[Configuration any] struct {
+type ConfigurationNetworkListener[Configuration any] struct {
 	ctx     context.Context
 	options Options[Configuration]
 
@@ -33,7 +33,7 @@ func NewConfigurationNetworkListener[Configuration any](
 	id string,
 	ctx context.Context,
 	options Options[Configuration],
-) (*NetworkListener[Configuration], error) {
+) (*ConfigurationNetworkListener[Configuration], error) {
 	return NewConfigurationNetworkListenerWithClient[Configuration](id, ctx, options, &http.Client{})
 }
 
@@ -42,12 +42,12 @@ func NewConfigurationNetworkListenerWithClient[Configuration any](
 	ctx context.Context,
 	options Options[Configuration],
 	httpClient *http.Client,
-) (*NetworkListener[Configuration], error) {
+) (*ConfigurationNetworkListener[Configuration], error) {
 	if err := options.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
 
-	listener := NetworkListener[Configuration]{
+	listener := ConfigurationNetworkListener[Configuration]{
 		ctx:                  ctx,
 		options:              options,
 		metrics:              NewNetworkListenerMetrics(id),
@@ -64,7 +64,7 @@ func NewConfigurationNetworkListenerWithClient[Configuration any](
 
 // Trigger an immediate request.
 // This resets the ticker so that even if a request was due momentarily, it won't be sent.
-func (nl *NetworkListener[Configuration]) Trigger() {
+func (nl *ConfigurationNetworkListener[Configuration]) Trigger() {
 	nl.triggerChannelLock.Lock()
 	defer nl.triggerChannelLock.Unlock()
 
@@ -78,7 +78,11 @@ func (nl *NetworkListener[Configuration]) Trigger() {
 	}
 }
 
-func (nl *NetworkListener[Configuration]) closeTriggerChannel() {
+func (listener *ConfigurationNetworkListener[Configuration]) GetConfiguration() Configuration {
+	return listener.cfg
+}
+
+func (nl *ConfigurationNetworkListener[Configuration]) closeTriggerChannel() {
 	nl.triggerChannelLock.Lock()
 	defer nl.triggerChannelLock.Unlock()
 
@@ -86,11 +90,11 @@ func (nl *NetworkListener[Configuration]) closeTriggerChannel() {
 	close(nl.triggerChannel)
 }
 
-func (nl *NetworkListener[Configuration]) randomInitialJitter() time.Duration {
+func (nl *ConfigurationNetworkListener[Configuration]) randomInitialJitter() time.Duration {
 	return time.Duration(rand.Int63n(int64(nl.options.Interval.MaximumInitialJitter)))
 }
 
-func (nl *NetworkListener[Configuration]) fetchConfig() ([]byte, error) {
+func (nl *ConfigurationNetworkListener[Configuration]) fetchConfig() ([]byte, error) {
 	req, err := http.NewRequestWithContext(nl.ctx, "GET", nl.url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -109,7 +113,7 @@ func (nl *NetworkListener[Configuration]) fetchConfig() ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func (nl *NetworkListener[Configuration]) outputConfig(data []byte) error {
+func (nl *ConfigurationNetworkListener[Configuration]) outputConfig(data []byte) error {
 	baseConfig, err := nl.options.BaseConfiguration.Unmarshal()
 	if err != nil {
 		nl.metrics.errorUnmarshalingBaseConfiguration.Inc()
@@ -155,7 +159,7 @@ func (nl *NetworkListener[Configuration]) outputConfig(data []byte) error {
 	}
 }
 
-func (nl *NetworkListener[Configuration]) fetchConfigCycle() {
+func (nl *ConfigurationNetworkListener[Configuration]) fetchConfigCycle() {
 	startTime := time.Now()
 
 	data, err := nl.fetchConfig()
@@ -177,7 +181,7 @@ func (nl *NetworkListener[Configuration]) fetchConfigCycle() {
 	nl.metrics.requestDuration.UpdateDuration(startTime)
 }
 
-func (nl *NetworkListener[Configuration]) initialJitter() bool {
+func (nl *ConfigurationNetworkListener[Configuration]) initialJitter() bool {
 	if nl.options.Interval.MaximumInitialJitter == 0 {
 		return false
 	}
@@ -195,7 +199,7 @@ func (nl *NetworkListener[Configuration]) initialJitter() bool {
 	return false
 }
 
-func (nl *NetworkListener[Configuration]) start() {
+func (nl *ConfigurationNetworkListener[Configuration]) start() {
 	defer nl.closeTriggerChannel()
 
 	if nl.initialJitter() {
