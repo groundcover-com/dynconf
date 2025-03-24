@@ -13,8 +13,6 @@ import (
 
 	"github.com/groundcover-com/dynconf/internal/testutils"
 	"github.com/groundcover-com/dynconf/pkg/getter"
-	fileListener "github.com/groundcover-com/dynconf/pkg/listener/file"
-	"github.com/groundcover-com/dynconf/pkg/listener/network"
 	networkListener "github.com/groundcover-com/dynconf/pkg/listener/network"
 	"github.com/groundcover-com/dynconf/pkg/manager"
 
@@ -145,11 +143,6 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 		t.Fatalf("failed to create manager with registered configurables: %v", err)
 	}
 
-	fileName, err := testutils.GetRandomTemporaryConfigurationFileName()
-	if err != nil {
-		t.Fatalf("failed to get random temporary configuration file name: %v", err)
-	}
-
 	mockConfiguration := cnf(testutils.RandomMockConfigurationWithTwoDepthLevels())
 	port := rand.Intn(65535-64535) + 64535
 
@@ -183,39 +176,22 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 		default:
 		}
 	}
-	_, err = fileListener.NewConfigurationFileListener(
-		"id",
-		fileName,
-		mgr,
-		fileListener.Options{
-			Viper: fileListener.ViperOptions{
-				ConfigType: "yaml",
-			},
-			BaseConfiguration: fileListener.BaseConfigurationOptions{
-				Type:   fileListener.BaseConfigurationTypeString,
-				String: MockConfigurationWithTwoDepthLevelsYAML,
-			},
-			Callbacks: fileListener.Callbacks{
-				OnConfigurationUpdateSuccess: onConfigurationUpdateSuccess,
-			},
-		},
-	)
-	if err != nil {
-		t.Fatalf("failed to initiate configuration file listener: %v", err)
-	}
 
 	_, err = networkListener.NewConfigurationNetworkListener(
 		"id",
 		context.Background(),
 		mgr,
 		networkListener.Options{
-			Request: network.RequestOptions{
+			Request: networkListener.RequestOptions{
 				URL:      fmt.Sprintf("http://localhost:%d", port),
 				Sections: []string{"First", "Second"},
 			},
-			Interval: network.IntervalOptions{
+			Interval: networkListener.IntervalOptions{
 				RequestIntervalEnabled: false,
 				MaximumInitialJitter:   0,
+			},
+			Callback: networkListener.CallbackOptions{
+				OnConfigurationUpdateSuccess: onConfigurationUpdateSuccess,
 			},
 		},
 	)

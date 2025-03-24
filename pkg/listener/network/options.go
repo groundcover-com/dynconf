@@ -52,7 +52,8 @@ func (options *BaseConfigurationOptions) Unmarshal() (map[string]any, error) {
 }
 
 type CallbackOptions struct {
-	OnFetchError func(error)
+	OnFetchError                 func(error)
+	OnConfigurationUpdateSuccess func()
 }
 
 type RequestOptions struct {

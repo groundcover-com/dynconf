@@ -144,6 +144,10 @@ func (nl *ConfigurationNetworkListener[Configuration]) outputConfig(data []byte)
 		return fmt.Errorf("failed to update configuration: %w", err)
 	}
 
+	if nl.options.Callback.OnConfigurationUpdateSuccess != nil {
+		nl.options.Callback.OnConfigurationUpdateSuccess()
+	}
+
 	nl.cfg = config
 	return nil
 }
