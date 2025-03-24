@@ -2,11 +2,10 @@ package e2e
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
+	"net"
 	"net/http"
-	"os"
 	"reflect"
 	"sync"
 	"testing"
@@ -22,6 +21,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type cnf testutils.MockConfigurationWithTwoDepthLevels
+
 const MockConfigurationWithTwoDepthLevelsYAML = `
 First:
   A:
@@ -35,16 +36,12 @@ Second:
     Value: false
 `
 
-func TestE2EWithTwoDepthLevels(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "config_*.yaml")
-	fileName := tmpFile.Name()
-	os.Remove(fileName)
-
-	mgr, err := manager.NewDynamicConfigurationManager[testutils.MockConfigurationWithTwoDepthLevels](
-		"testE2ETwoDepthLevels",
-	)
+func createManagerWithRegisteredConfigurables(
+	id string,
+) (*manager.DynamicConfigurationManager[cnf], *cnf, error) {
+	mgr, err := manager.NewDynamicConfigurationManager[cnf](id)
 	if err != nil {
-		t.Fatalf("failed to initiate configuration manager: %v", err)
+		return nil, nil, fmt.Errorf("failed to initiate configuration manager: %w", err)
 	}
 
 	topLevelGetter := getter.NewDynamicConfigurationGetter(mgr)
@@ -53,7 +50,7 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 	firstAGetter := firstGetter.Select("A")
 	firstBGetter := firstGetter.Select("B")
 
-	copyConfiguration := testutils.MockConfigurationWithTwoDepthLevels{}
+	copyConfiguration := cnf{}
 	callbackSecond := func(cfg testutils.MockConfigurationWithOneDepthLevel) error {
 		copyConfiguration.Second = cfg
 		return nil
@@ -68,49 +65,102 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 	}
 
 	if err := secondGetter.Register(callbackSecond); err != nil {
-		t.Fatalf("failed to register callback on Second configuration: %v", err)
+		return nil, nil, fmt.Errorf("failed to register callback on Second configuration: %w", err)
 	}
 	if err := firstAGetter.Register(callbackFirstA); err != nil {
-		t.Fatalf("failed to register callback on FirstA configuration: %v", err)
+		return nil, nil, fmt.Errorf("failed to register callback on FirstA configuration: %w", err)
 	}
 	if err := firstBGetter.Register(callbackFirstB); err != nil {
-		t.Fatalf("failed to register callback on FirstB configuration: %v", err)
+		return nil, nil, fmt.Errorf("failed to register callback on FirstB configuration: %w", err)
 	}
 
-	mockConfiguration := testutils.RandomMockConfigurationWithTwoDepthLevels()
-	mockConfigurationYaml, err := yaml.Marshal(mockConfiguration)
+	return mgr, &copyConfiguration, nil
+}
+
+func startHttpServer(port int, cnf cnf) (*http.Server, error) {
+	cnfYaml, err := yaml.Marshal(cnf)
 	if err != nil {
-		t.Fatalf("failed to marshal mock configuration: %v", err)
+		return nil, fmt.Errorf("failed to marshal mock configuration: %w", err)
 	}
 
-	port := rand.Intn(65535-64535) + 64535
 	serverErrCh := make(chan error)
+	serverErrorChannelMutex := sync.Mutex{}
+	serverErrorChannelOpen := true
 	defer func() {
-		serverErr := <-serverErrCh
-		if serverErr != nil && !errors.Is(serverErr, http.ErrServerClosed) {
-			t.Fatalf("%v", serverErr)
-		}
+		serverErrorChannelMutex.Lock()
+		defer serverErrorChannelMutex.Unlock()
+		serverErrorChannelOpen = false
+		close(serverErrCh)
 	}()
+
 	server := &http.Server{Addr: fmt.Sprintf(":%d", port)}
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
-		w.Write([]byte(mockConfigurationYaml))
+		w.Write([]byte(cnfYaml))
 	})
+
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
-			serverErrCh <- fmt.Errorf("error starting server: %w", err)
-			return
+			serverErrorChannelMutex.Lock()
+			defer serverErrorChannelMutex.Unlock()
+			if serverErrorChannelOpen {
+				serverErrCh <- fmt.Errorf("error starting server: %w", err)
+			}
 		}
-		serverErrCh <- nil
 	}()
+
+	addr := fmt.Sprintf("localhost:%d", port)
+	timeout := 50 * time.Millisecond
+	deadline := time.Now().Add(timeout)
+	ready := false
+
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", addr, timeout)
+		if err == nil {
+			ready = true
+			conn.Close()
+			break
+		}
+	}
+
+	if !ready {
+		server.Close()
+		return nil, fmt.Errorf("server not ready in time")
+	}
+
+	select {
+	case serverErr := <-serverErrCh:
+		server.Close()
+		return nil, fmt.Errorf("server error %w", serverErr)
+	default:
+	}
+
+	return server, nil
+}
+
+func TestE2EWithTwoDepthLevels(t *testing.T) {
+	mgr, copyConfiguration, err := createManagerWithRegisteredConfigurables("testE2E")
+	if err != nil {
+		t.Fatalf("failed to create manager with registered configurables: %v", err)
+	}
+
+	fileName, err := testutils.GetRandomTemporaryConfigurationFileName()
+	if err != nil {
+		t.Fatalf("failed to get random temporary configuration file name: %v", err)
+	}
+
+	mockConfiguration := cnf(testutils.RandomMockConfigurationWithTwoDepthLevels())
+	port := rand.Intn(65535-64535) + 64535
+
+	server, err := startHttpServer(port, mockConfiguration)
+	if err != nil {
+		t.Fatalf("failed to start HTTP server: %v", err)
+	}
 	defer func() {
 		if err := server.Close(); err != nil {
 			t.Fatalf("failed to close server: %v", err)
 		}
 	}()
-
-	// wait for http server to get up
-	time.Sleep(time.Millisecond * 5)
 
 	onConfigurationUpdateSuccessLock := sync.Mutex{}
 	configUpdatedChannelOpen := true
@@ -178,11 +228,11 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 		t.Fatalf("timeout when awaiting configuration updated callback")
 	}
 
-	if !reflect.DeepEqual(copyConfiguration, mockConfiguration) {
+	if !reflect.DeepEqual(*copyConfiguration, mockConfiguration) {
 		t.Fatalf(
 			"after updating configuration, expected %#v but got %#v",
 			mockConfiguration,
-			copyConfiguration,
+			*copyConfiguration,
 		)
 	}
 }
