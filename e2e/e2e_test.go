@@ -185,7 +185,6 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 
 	select {
 	case <-configUpdatedChannel:
-		t.Log("configuration update notification received")
 	case <-time.After(time.Millisecond * 100):
 		t.Fatalf("timeout when awaiting configuration updated callback")
 	}
