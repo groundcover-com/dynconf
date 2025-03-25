@@ -1,6 +1,9 @@
 package testutils
 
-import "math/rand"
+import (
+	"math/rand"
+	"os"
+)
 
 type MockConfigurationA struct {
 	Value string
@@ -107,4 +110,16 @@ func RandomMockConfigurationWithTwoDepthLevels() MockConfigurationWithTwoDepthLe
 		First:  RandomMockConfigurationWithOneDepthLevel(),
 		Second: RandomMockConfigurationWithOneDepthLevel(),
 	}
+}
+
+func GetRandomTemporaryConfigurationFileName() (string, error) {
+	tmpFile, err := os.CreateTemp("", "config_*.yaml")
+	if err != nil {
+		return "", err
+	}
+
+	fileName := tmpFile.Name()
+	os.Remove(fileName)
+
+	return fileName, nil
 }
