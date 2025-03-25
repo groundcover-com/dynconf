@@ -1,5 +1,7 @@
 package getter
 
+import "fmt"
+
 type DynamicConfigurationGettable interface {
 	Register(path []string, callback any) error
 	Get(path []string, out any) error
@@ -26,4 +28,37 @@ func (gettable *MockDynamicConfigurationGettable) Register(path []string, callba
 
 func (gettable *MockDynamicConfigurationGettable) Get(path []string, out any) error {
 	return gettable.get(path, out)
+}
+
+type MockDynamicConfigurationGettableWithType[T any] struct {
+	register func(path []string, callback func(T) error) error
+	get      func(path []string, out *T) error
+}
+
+func NewMockDynamicConfigurationGettableWithType[T any](
+	register func(path []string, callback func(T) error) error,
+	get func(path []string, out *T) error,
+) *MockDynamicConfigurationGettableWithType[T] {
+	return &MockDynamicConfigurationGettableWithType[T]{
+		register: register,
+		get:      get,
+	}
+}
+
+func (gettable *MockDynamicConfigurationGettableWithType[T]) Register(path []string, callback any) error {
+	callbackFunc, ok := callback.(func(T) error)
+	if !ok {
+		return fmt.Errorf("invalid callback type: expected 'func(T) error', got %T", callback)
+	}
+
+	return gettable.register(path, callbackFunc)
+}
+
+func (gettable *MockDynamicConfigurationGettableWithType[T]) Get(path []string, out any) error {
+	typedOut, ok := out.(*T)
+	if !ok {
+		return fmt.Errorf("invalid out type: expected '*T', got %T", out)
+	}
+
+	return gettable.get(path, typedOut)
 }

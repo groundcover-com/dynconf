@@ -35,3 +35,16 @@ func (getter *DynamicConfigurationGetter) Select(selection string) *DynamicConfi
 		prefix:   append(slices.Clone(getter.prefix), selection),
 	}
 }
+
+type MockDynamicConfigurationGetter[T any] struct {
+	gettable DynamicConfigurationGettable
+	prefix   []string
+}
+
+func (getter *MockDynamicConfigurationGetter[T]) Register(callback func(T) error) error {
+	return getter.gettable.Register([]string{}, callback)
+}
+
+func (getter *MockDynamicConfigurationGetter[T]) Get(out *T) error {
+	return getter.gettable.Get([]string{}, out)
+}
