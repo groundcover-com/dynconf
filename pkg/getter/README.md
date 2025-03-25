@@ -31,3 +31,24 @@ err := nextLevelGetter.Register(callback)
 
 Like so, the module above only needs access to `nextLevelGetter`.
 If the path to its configuration alters, it doesn't need to be aware: only the module that initiates it needs be.
+
+## Testing
+
+When testing a dynamically-configurable module that uses a getter, mocks can be used.
+The following example sets a getter that when passed to a module that uses it, handles `Get` or `Registers` as requested inline.
+An example module that uses `Register` can have its configuration reload logic tested by triggering the registered callback directly.
+
+```go
+getter.NewDynamicConfigurationGetter(
+	getter.NewMockDynamicConfigurationGettableWithType(
+		func(path []string, out *ConfigurationType) error {
+			*out = myConfiguration
+			return nil
+		},
+		func(path []string, callback func(a ConfigurationType) error) error {
+			myCallback = callback // store the callback to push new configuration later if needed
+			return callback(myConfiguration)
+		},
+	),
+)
+```
