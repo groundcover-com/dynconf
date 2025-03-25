@@ -22,6 +22,13 @@ func NewMockDynamicConfigurationGettable(
 	}
 }
 
+func NewNoopDynamicConfigurationGettable() *MockDynamicConfigurationGettable {
+	return &MockDynamicConfigurationGettable{
+		register: func(path []string, callback any) error { return nil },
+		get:      func(path []string, out any) error { return nil },
+	}
+}
+
 func (gettable *MockDynamicConfigurationGettable) Register(path []string, callback any) error {
 	return gettable.register(path, callback)
 }
