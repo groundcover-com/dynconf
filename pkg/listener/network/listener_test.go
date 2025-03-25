@@ -3,58 +3,60 @@ package network_test
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/groundcover-com/dynconf/internal/testutils"
+	"github.com/groundcover-com/dynconf/pkg/listener"
 	"github.com/groundcover-com/dynconf/pkg/listener/network"
+	"gopkg.in/yaml.v3"
 )
 
 const (
 	requestTimeout = time.Millisecond * 10
 
-	fileContents = `
-First:
-  A:
-    Value: "some_value_A"
-  B:
-    Value: true
+	mockConfigurationWithTwoDepthLevelsHTTPResponse = `
+first:
+  a:
+    value: "some_value_A"
+  b:
+    value: true
 `
 
-	base = `
-First:
-  A:
-    Value: "baseFirst"
-  B:
-    Value: true
-Second:
-  A:
-    Value: "baseSecond"
-  B:
-    Value: true
+	mockConfigurationWithTwoDepthLevelsBaseConfiguration = `
+first:
+  a:
+    value: "baseFirst"
+  b:
+    value: true
+second:
+  a:
+    value: "baseSecond"
+  b:
+    value: true
+`
+
+	mockConfigurationWithTwoDepthLevelsExpectedOutcome = `
+first:
+  a:
+    value: "some_value_A"
+  b:
+    value: true
+second:
+  a:
+    value: "baseSecond"
+  b:
+    value: true
 `
 )
 
-type mockServer struct {
-	timesCalled int
-}
-
-func (server *mockServer) mockServerResponse(w http.ResponseWriter, r *http.Request) {
-	server.timesCalled++
-	fmt.Fprintln(w, fileContents)
-}
-
-type dynamicConfigurable[T any] struct {
-	callback func(T) error
-}
-
-func (dc dynamicConfigurable[T]) OnConfigurationUpdate(t T) error {
-	return dc.callback(t)
-}
-
-func initiateListener[T any](id string) (server *mockServer, channel <-chan T, cleanup func(), err error) {
+func initiateListener[T any](
+	id string,
+	baseConfiguration string,
+	server *testutils.HTTPServerMock,
+) (channel <-chan T, cleanup func(), err error) {
 	var httpServer *httptest.Server
 	var dataChan *chan T
 	var ctxCancel context.CancelFunc
@@ -70,16 +72,14 @@ func initiateListener[T any](id string) (server *mockServer, channel <-chan T, c
 		}
 	}
 
-	ms := mockServer{}
-	httpServer = httptest.NewServer(http.HandlerFunc(ms.mockServerResponse))
-
+	httpServer = httptest.NewServer(server)
 	ch := make(chan T, 10)
-	myConfigurable := dynamicConfigurable[testutils.MockConfigurationWithTwoDepthLevels]{
-		callback: func(cfg testutils.MockConfigurationWithTwoDepthLevels) error {
+	myConfigurable := listener.NewDynamicConfigurableWithCallback(
+		func(cfg T) error {
 			ch <- cfg
 			return nil
 		},
-	}
+	)
 	dataChan = &ch
 
 	options := network.Options{
@@ -93,14 +93,14 @@ func initiateListener[T any](id string) (server *mockServer, channel <-chan T, c
 		},
 		BaseConfiguration: network.BaseConfigurationOptions{
 			Type:   network.BaseConfigurationTypeString,
-			String: base,
+			String: baseConfiguration,
 		},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctxCancel = cancel
 
-	_, err = network.NewConfigurationNetworkListenerWithClient[testutils.MockConfigurationWithTwoDepthLevels](
+	_, err = network.NewConfigurationNetworkListenerWithClient(
 		id,
 		ctx,
 		myConfigurable,
@@ -108,21 +108,38 @@ func initiateListener[T any](id string) (server *mockServer, channel <-chan T, c
 		httpServer.Client(),
 	)
 	if err != nil {
-		return nil, nil, cleanup, fmt.Errorf("failed to create listener %s: %w", id, err)
+		return nil, cleanup, fmt.Errorf("failed to create listener %s: %w", id, err)
 	}
 
-	return &ms, ch, cleanup, nil
+	return ch, cleanup, nil
 }
 
-func TestFetchConfig(t *testing.T) {
-	_, channel, cleanup, err := initiateListener("testFetchConfig")
+func TestFetchMockConfigurationWithTwoDepthLevels(t *testing.T) {
+	server := testutils.NewHTTPServerMock()
+	server.SetResponse(mockConfigurationWithTwoDepthLevelsHTTPResponse)
+	channel, cleanup, err := initiateListener[testutils.MockConfigurationWithTwoDepthLevels](
+		"testFetchConfigurationWithTwoDepthLevels",
+		mockConfigurationWithTwoDepthLevelsBaseConfiguration,
+		server,
+	)
 	defer cleanup()
 	if err != nil {
 		t.Fatalf("failed to initiate listener: %v", err)
 	}
 
-	data := <-channel
-	if string(data) != fileContents+"\n" { // httptest adds newline
-		t.Errorf("expected %q, but got %q", fileContents, string(data))
+	var data testutils.MockConfigurationWithTwoDepthLevels
+	select {
+	case data = <-channel:
+	case <-time.After(time.Millisecond * 100):
+		t.Fatalf("data channel timeout")
+	}
+
+	var expected testutils.MockConfigurationWithTwoDepthLevels
+	if err := yaml.Unmarshal([]byte(mockConfigurationWithTwoDepthLevelsExpectedOutcome), &expected); err != nil {
+		t.Fatalf("failed to prepare expected outcome: %v", err)
+	}
+
+	if !reflect.DeepEqual(data, expected) {
+		t.Fatalf("after updating configuration, expected %#v but got %#v", expected, data)
 	}
 }
