@@ -37,7 +37,6 @@ func createManagerWithRegisteredConfigurables(
 
 	copyConfiguration := cnf{}
 	callbackSecond := func(cfg testutils.MockConfigurationWithOneDepthLevel) error {
-		fmt.Printf("callback second\n")
 		copyConfiguration.Second = cfg
 		return nil
 	}
