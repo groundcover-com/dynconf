@@ -31,17 +31,17 @@ func (gettable *MockDynamicConfigurationGettable) Get(path []string, out any) er
 }
 
 type MockDynamicConfigurationGettableWithType[T any] struct {
-	register func(path []string, callback func(T) error) error
 	get      func(path []string, out *T) error
+	register func(path []string, callback func(T) error) error
 }
 
 func NewMockDynamicConfigurationGettableWithType[T any](
-	register func(path []string, callback func(T) error) error,
 	get func(path []string, out *T) error,
+	register func(path []string, callback func(T) error) error,
 ) *MockDynamicConfigurationGettableWithType[T] {
 	return &MockDynamicConfigurationGettableWithType[T]{
-		register: register,
 		get:      get,
+		register: register,
 	}
 }
 

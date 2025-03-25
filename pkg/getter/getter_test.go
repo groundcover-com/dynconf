@@ -112,3 +112,54 @@ func TestGetterOnTopLevel(t *testing.T) {
 		)
 	}
 }
+
+func TestGetterMockWithType(t *testing.T) {
+	cfgA1 := testutils.RandomMockConfigurationA()
+	cfgA2 := testutils.RandomMockConfigurationA()
+	cfgA2_2 := testutils.RandomMockConfigurationA()
+
+	var gotCallback func(a testutils.MockConfigurationA) error = nil
+	getter := getter.NewDynamicConfigurationGetter(
+		getter.NewMockDynamicConfigurationGettableWithType(
+			func(path []string, out *testutils.MockConfigurationA) error {
+				*out = cfgA1
+				return nil
+			},
+			func(path []string, callback func(a testutils.MockConfigurationA) error) error {
+				gotCallback = callback
+				return callback(cfgA2)
+			},
+		),
+	)
+
+	var outA1 testutils.MockConfigurationA
+	var outA2 testutils.MockConfigurationA
+	callbackA2 := func(a testutils.MockConfigurationA) error {
+		outA2 = a
+		return nil
+	}
+
+	if err := getter.Get(&outA1); err != nil {
+		t.Fatalf("failed to get A1: %v", err)
+	}
+	if !reflect.DeepEqual(outA1, cfgA1) {
+		t.Fatalf("after updating configuration using get, expected %#v but got %#v", cfgA1, outA1)
+	}
+
+	if err := getter.Register(callbackA2); err != nil {
+		t.Fatalf("failed to register A2: %v", err)
+	}
+	if !reflect.DeepEqual(outA2, cfgA2) {
+		t.Fatalf("after updating configuration using callback, expected %#v but got %#v", cfgA2, outA2)
+	}
+
+	if gotCallback == nil {
+		t.Fatalf("didn't get callback")
+	}
+	if err := gotCallback(cfgA2_2); err != nil {
+		t.Fatalf("failed to explicitly call callback: %v", err)
+	}
+	if !reflect.DeepEqual(outA2, cfgA2_2) {
+		t.Fatalf("after updating configuration using callback 2nd time, expected %#v but got %#v", cfgA2_2, outA2)
+	}
+}
