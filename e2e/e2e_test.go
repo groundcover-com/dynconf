@@ -21,19 +21,6 @@ import (
 
 type cnf testutils.MockConfigurationWithTwoDepthLevels
 
-const MockConfigurationWithTwoDepthLevelsYAML = `
-First:
-  A:
-    Value: "some_value_A"
-  B:
-    Value: true
-Second:
-  A:
-    Value: "some_value_A2"
-  B:
-    Value: false
-`
-
 func createManagerWithRegisteredConfigurables(
 	id string,
 ) (*manager.DynamicConfigurationManager[cnf], *cnf, error) {
