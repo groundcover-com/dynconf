@@ -61,10 +61,16 @@ func randomBool() bool {
 	return rand.Intn(2) == 0
 }
 
+func RandomMockConfigurationA() MockConfigurationA {
+	return MockConfigurationA{
+		Value: randomString(),
+	}
+}
+
 func RandomMockConfigurationWithDuplicates() MockConfigurationWithDuplicates {
 	return MockConfigurationWithDuplicates{
-		A:  MockConfigurationA{Value: randomString()},
-		A2: MockConfigurationA{Value: randomString()},
+		A:  RandomMockConfigurationA(),
+		A2: RandomMockConfigurationA(),
 		B:  MockConfigurationB{Value: randomBool()},
 	}
 }
@@ -79,16 +85,14 @@ func RandomMockConfigurationWithTypedef() MockConfigurationWithTypedef {
 
 func RandomMockConfigurationWithOneDepthLevel() MockConfigurationWithOneDepthLevel {
 	return MockConfigurationWithOneDepthLevel{
-		A: MockConfigurationA{Value: randomString()},
+		A: RandomMockConfigurationA(),
 		B: MockConfigurationB{Value: randomBool()},
 	}
 }
 
 func RandomMockConfigurationWithA() MockConfigurationWithA {
 	return MockConfigurationWithA{
-		A: MockConfigurationA{
-			Value: randomString(),
-		},
+		A: RandomMockConfigurationA(),
 	}
 }
 

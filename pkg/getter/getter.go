@@ -2,11 +2,6 @@ package getter
 
 import "slices"
 
-type DynamicConfigurationGettable interface {
-	Register(path []string, callback any) error
-	Get(path []string, out any) error
-}
-
 type DynamicConfigurationGetter struct {
 	gettable DynamicConfigurationGettable
 	prefix   []string
