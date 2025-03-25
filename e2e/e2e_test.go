@@ -182,6 +182,9 @@ func TestE2EWithTwoDepthLevels(t *testing.T) {
 			},
 		},
 	)
+	if err != nil {
+		t.Fatalf("failed to initiate configuration network listener: %v", err)
+	}
 
 	select {
 	case <-configUpdatedChannel:
